@@ -216,7 +216,13 @@ class OsmConflator:
             logging.debug('Overpass query: %s', query)
             r = requests.get(OVERPASS_SERVER + 'interpreter', {'data': query})
             if r.status_code != 200:
-                raise IOError('Failed to download data from Overpass API: {} {}\nQuery: {}'.format(r.status_code, r.text, query))
+                logging.error('Failed to download data from Overpass API: %s', r.status_code)
+                logging.error('Query: %s', query)
+                logging.error('Error message: %s', r.text)
+                if 'rate_limited' in r.text:
+                    r = requests.get(OVERPASS_SERVER + 'status')
+                    logging.warning('Seems like you are rate limited. API status:\n%s', r.text)
+                raise IOError()
             for el in r.json()['elements']:
                 if 'tags' not in el:
                     continue
@@ -299,8 +305,12 @@ class OsmConflator:
                 changed = False
                 for k, v in sp.tags.items():
                     if k not in p.tags or (k in master_tags and p.tags[k] != v):
-                        p.tags[k] = v
-                        changed = True
+                        if v is not None:
+                            p.tags[k] = v
+                            changed = True
+                        elif k in p.tags:
+                            del p.tags[k]
+                            changed = True
                 if changed:
                     p.action = 'modify'
                     # If not, action is None and we're not including this object into the osmChange
@@ -309,7 +319,7 @@ class OsmConflator:
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
         elif keep or p.is_area():
-            if not retag:
+            if retag is None:
                 retag = {'fixme': DELETED_FIXME}
             for k, v in retag.items():
                 if v is not None:
