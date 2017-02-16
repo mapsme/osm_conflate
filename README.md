@@ -3,10 +3,14 @@
 This is a script for merging points from some third-party source with OpenStreetMap data.
 Please make sure the license allows that. After merging and uploading, the data can be updated.
 
+## Installation
+
+Clone this repository, and from inside it run `pip install -r requirements.txt`.
+
 ## Profiles
 
 Each source should have a profile. It is a python script with variables configuring
-names, tags and processing. See examples in the `profiles` directory.
+names, tags and processing. See heavily commented examples in the `profiles` directory.
 
 ## Usage
 
@@ -15,7 +19,7 @@ For a simplest case, run:
     ./conflate.py <profile.py>
 
 You might want to add `-v` to get status messages, and other arguments to pass a dataset file
-or write the resulting osmChange somewhere. Run `./conflate.py --help` to see a list of arguments.
+or write the resulting osmChange somewhere. Run `./conflate.py -h` to see a list of arguments.
 
 ## Uploading to OpenStreetMap
 
