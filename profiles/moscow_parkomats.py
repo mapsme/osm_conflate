@@ -20,7 +20,8 @@ bbox = True
 max_distance = 0.0003  # ~30 m
 # Delete objects that match query tags but not dataset? False is the default
 delete_unmatched = False
-# If set, modify tags on unmatched objects instead
+# If set, and delete_unmatched is False, modify tags on unmatched objects instead
+# Always used for area features, since these are not deleted
 tag_unmatched = {
     'fixme': 'Проверить на местности: в данных ДИТ отсутствует. Вероятно, демонтирован',
     'amenity': None,

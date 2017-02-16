@@ -15,6 +15,7 @@ except ImportError:
 OVERPASS_SERVER = 'http://overpass-api.de/api/'
 BBOX_PADDING = 0.1  # in degrees
 MAX_DISTANCE = 0.001  # how far can object be to be considered a match. 0.001 dg is ~110 m
+DELETED_FIXME = 'This object is most likely obsolete. Please check'
 
 
 class SourcePoint:
@@ -55,6 +56,9 @@ class OSMPoint(SourcePoint):
         self.version = version
         self.members = None
         self.action = None
+
+    def is_area(self):
+        return self.osm_type != 'node'
 
     def to_xml(self):
         """Produces an XML out of the point data. Disregards the "action" field."""
@@ -277,7 +281,7 @@ class OsmConflator:
             pt.members = members
             self.osmdata[pt.id] = pt
 
-    def register_match(self, dataset_key, osmdata_key, retag=None):
+    def register_match(self, dataset_key, osmdata_key, keep=False, retag=None):
         if osmdata_key is not None:
             p = self.osmdata[osmdata_key]
             del self.osmdata[osmdata_key]
@@ -304,7 +308,9 @@ class OsmConflator:
             p.tags['source'] = source
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
-        elif retag:
+        elif keep or p.is_area():
+            if not retag:
+                retag = {'fixme': DELETED_FIXME}
             for k, v in retag.items():
                 if v is not None:
                     p.tags[k] = v
@@ -392,13 +398,13 @@ class OsmConflator:
                 if self.ref is not None and self.ref in p.tags:
                     # When ref:whatever is present, we can delete that object safely
                     count_deleted += 1
-                    self.register_match(None, k)
+                    self.register_match(None, k, retag=retag)
                 elif delete_unmatched or retag:
-                    if retag:
+                    if not delete_unmatched or p.is_area():
                         count_retagged += 1
                     else:
                         count_deleted += 1
-                    self.register_match(None, k, retag=retag)
+                    self.register_match(None, k, keep=not delete_unmatched, retag=retag)
             logging.info('Deleted %s and retagged %s unmatched objects from OSM', count_deleted, count_retagged)
 
     def to_osc(self):
