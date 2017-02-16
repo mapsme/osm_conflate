@@ -15,7 +15,6 @@ except ImportError:
 OVERPASS_SERVER = 'http://overpass-api.de/api/'
 BBOX_PADDING = 0.1  # in degrees
 MAX_DISTANCE = 0.001  # how far can object be to be considered a match. 0.001 dg is ~110 m
-DELETED_FIXME = 'This object is most likely obsolete. Please check'
 
 
 class SourcePoint:
@@ -59,6 +58,15 @@ class OSMPoint(SourcePoint):
 
     def is_area(self):
         return self.osm_type != 'node'
+
+    def is_poi(self):
+        if self.osm_type == 'node':
+            return True
+        if self.osm_type == 'way' and len(self.members) > 2:
+            return self.members[0] == self.members[-1]
+        if self.osm_type == 'relation' and len(self.members) > 0:
+            return self.tags.get('type', None) == 'multipolygon'
+        return False
 
     def to_xml(self):
         """Produces an XML out of the point data. Disregards the "action" field."""
@@ -235,7 +243,8 @@ class OsmConflator:
                         pt.members = el['nodes']
                     elif 'members' in el:
                         pt.members = [(x['type'], x['ref'], x['role']) for x in el['members']]
-                    self.osmdata[pt.id] = pt
+                    if pt.is_poi():
+                        self.osmdata[pt.id] = pt
 
     def parse_osm(self, fileobj):
         """Parses an OSM XML file into the "osmdata" field. For ways and relations,
@@ -285,7 +294,8 @@ class OsmConflator:
                 members = [(m.get('type'), m.get('ref'), m.get('role')) for m in el.findall('member')]
             pt = OSMPoint(el.tag, el.get('id'), el.get('version'), coord[0], coord[1], tags)
             pt.members = members
-            self.osmdata[pt.id] = pt
+            if pt.is_poi():
+                self.osmdata[pt.id] = pt
 
     def register_match(self, dataset_key, osmdata_key, keep=False, retag=None):
         """Registers a match between an OSM point and a dataset point.
