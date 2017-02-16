@@ -28,7 +28,7 @@ tag_unmatched = {
     'was:amenity': 'vending_machine'
 }
 # A set of authoritative tags to replace on matched objects
-master_tags = set(('zone:parking', 'ref', 'contact:phone', 'contact:website', 'operator'))
+master_tags = ('zone:parking', 'ref', 'contact:phone', 'contact:website', 'operator')
 
 
 # A list of SourcePoint objects. Initialize with (id, lat, lon, {tags}).

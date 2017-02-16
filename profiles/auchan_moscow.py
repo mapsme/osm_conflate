@@ -10,7 +10,7 @@ no_dataset_id = True
 # Using a name query with regular expressions
 query = [('shop', 'supermarket'), ('name', '~Ашан|АШАН')]
 # We don't parse opening hours yet, but it'd be cool if we did
-master_tags = set(('name', 'opening_hours', 'phone'))
+master_tags = ('name', 'opening_hours', 'phone')
 # Empty dict so we don't add a fixme tag to unmatched objects
 tag_unmatched = {}
 # Coordinates are VERY approximate, so increasing max distance to ~1 km

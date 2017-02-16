@@ -316,7 +316,7 @@ class OsmConflator:
                 p = OSMPoint('node', -1-len(self.matched), 1, sp.lat, sp.lon, sp.tags)
                 p.action = 'create'
             else:
-                master_tags = self.profile.get('master_tags', required='a set of authoritative tags that replace OSM values')
+                master_tags = set(self.profile.get('master_tags', required='a set of authoritative tags that replace OSM values'))
                 if update_tags(p.tags, sp.tags, master_tags):
                     p.action = 'modify'
             source = self.profile.get('source', required='value of "source" tag for uploaded OSM objects')
