@@ -153,7 +153,7 @@ class OsmConflator:
             else:
                 q = '"{}"="{}"'.format(t[0], t[1])
             tag_str += '[' + q + ']'
-        query = '[out:json][timeout:300];('
+        query = '[out:json][timeout:120];('
         bbox_str = '' if bbox is None else '(' + ','.join([str(x) for x in bbox]) + ')'
         for t in ('node', 'way', 'relation'):
             query += t + tag_str + bbox_str + ';'
@@ -288,48 +288,48 @@ class OsmConflator:
             self.osmdata[pt.id] = pt
 
     def register_match(self, dataset_key, osmdata_key, keep=False, retag=None):
-        if osmdata_key is not None:
-            p = self.osmdata[osmdata_key]
-            del self.osmdata[osmdata_key]
-        else:
-            p = None
+        """Registers a match between an OSM point and a dataset point.
 
-        if dataset_key is not None:
-            sp = self.dataset[dataset_key]
-            del self.dataset[dataset_key]
-            if p is None:
-                p = OSMPoint('node', -1-len(self.matched), 1, sp.lat, sp.lon, sp.tags)
-                p.action = 'create'
-            else:
-                master_tags = self.profile.get('master_tags', required='a set of authoritative tags that replace OSM values')
-                changed = False
-                for k, v in sp.tags.items():
-                    if k not in p.tags or (k in master_tags and p.tags[k] != v):
-                        if v is not None:
+        Merges tags from an OSM Point and a dataset point, and add the result to the self.matched list.
+        If dataset_key is None, deletes or retags the OSM point.
+        If osmdata_key is None, adds a new OSM point for the dataset point.
+        """
+        def update_tags(tags, source, master_tags=None):
+            """Updates tags dictionary with tags from source, returns True is something was changed."""
+            changed = False
+            if source:
+                for k, v in source.items():
+                    if k not in tags or (p.tags[k] != v and (not master_tags or k in master_tags)):
+                        if v is not None and len(v) > 0:
                             p.tags[k] = v
                             changed = True
                         elif k in p.tags:
                             del p.tags[k]
                             changed = True
-                if changed:
+            return changed
+
+        p = self.osmdata.pop(osmdata_key, None)
+        sp = self.dataset.pop(dataset_key, None)
+
+        if sp is not None:
+            if p is None:
+                p = OSMPoint('node', -1-len(self.matched), 1, sp.lat, sp.lon, sp.tags)
+                p.action = 'create'
+            else:
+                master_tags = self.profile.get('master_tags', required='a set of authoritative tags that replace OSM values')
+                if update_tags(p.tags, sp.tags, master_tags):
                     p.action = 'modify'
-                    # If not, action is None and we're not including this object into the osmChange
             source = self.profile.get('source', required='value of "source" tag for uploaded OSM objects')
             p.tags['source'] = source
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
         elif keep or p.is_area():
-            if retag is None:
-                retag = {'fixme': DELETED_FIXME}
-            for k, v in retag.items():
-                if v is not None:
-                    p.tags[k] = v
-                elif k in p.tags:
-                    del p.tags[k]
-            p.action = 'modify'
+            if update_tags(p.tags, retag):
+                p.action = 'modify'
         else:
             p.action = 'delete'
-        if p is not None and p.action is not None:
+
+        if p.action is not None:
             self.matched.append(p)
 
     def match_dataset_points_smart(self):
