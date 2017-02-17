@@ -1,3 +1,7 @@
 *.swp
 *.osc
 *.zip
+*.json
+*.gz
+*.csv
+private/

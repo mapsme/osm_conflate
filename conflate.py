@@ -225,11 +225,11 @@ class OsmConflator:
             r = requests.get(OVERPASS_SERVER + 'interpreter', {'data': query})
             if r.status_code != 200:
                 logging.error('Failed to download data from Overpass API: %s', r.status_code)
-                logging.error('Query: %s', query)
-                logging.error('Error message: %s', r.text)
                 if 'rate_limited' in r.text:
                     r = requests.get(OVERPASS_SERVER + 'status')
                     logging.warning('Seems like you are rate limited. API status:\n%s', r.text)
+                else:
+                    logging.error('Error message: %s', r.text)
                 raise IOError()
             for el in r.json()['elements']:
                 if 'tags' not in el:
