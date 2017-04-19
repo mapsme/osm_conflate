@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import argparse
+import kdtree
 import logging
+import math
 import requests
 import sys
-import kdtree
 from io import BytesIO
 import json  # for profiles
 import re    # for profiles
@@ -335,12 +336,18 @@ class OsmConflator:
                 # Modify
                 if ref:
                     result.update({'ref_lat': ref.lat, 'ref_lon': ref.lon})
+                    # Calculate distance in meters
+                    dx = (ref.lon - after.lon) * math.cos(0.5 * (ref.lat + after.lat))
+                    dy = ref.lat - after.lat
+                    result['distance'] = round(63781370 * math.sqrt(dx*dx + dy*dy))
+                    # Find tags that were superseeded by OSM tags
                     unused_tags = {}
                     for k, v in ref.tags.items():
                         if k not in after.tags or after.tags[k] != v:
                             unused_tags[k] = v
                     if unused_tags:
                         result['tags_unused'] = unused_tags
+                # Now compare old and new OSM tags
                 tags = {}
                 changed_tags = {}
                 for k in set(after.tags.keys()).union(set(before.tags.keys())):
