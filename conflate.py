@@ -56,6 +56,12 @@ class OSMPoint(SourcePoint):
         self.members = None
         self.action = None
 
+    def copy(self):
+        """Returns a copy of this object, except for members field."""
+        c = OSMPoint(self.osm_type, self.osm_id, self.version, self.lat, self.lon, self.tags.copy())
+        c.action = self.action
+        return c
+
     def is_area(self):
         return self.osm_type != 'node'
 
@@ -140,6 +146,7 @@ class OsmConflator:
         self.dataset = {p.id: p for p in dataset}
         self.osmdata = {}
         self.matched = []
+        self.changes = []
         self.profile = profile
         if self.profile.get('no_dataset_id', False):
             self.ref = None
@@ -318,7 +325,39 @@ class OsmConflator:
                             changed = True
             return changed
 
+        def format_change(before, after, ref):
+            result = {'type': after.osm_type, 'id': after.osm_id, 'lat': after.lat, 'lon': after.lon, 'action': after.action}
+            if after.action == 'create':
+                result['tags'] = after.tags
+            elif after.action == 'delete':
+                result['tags'] = after.tags
+            else:
+                # Modify
+                if ref:
+                    result.update({'ref_lat': ref.lat, 'ref_lon': ref.lon})
+                    unused_tags = {}
+                    for k, v in ref.tags.items():
+                        if k not in after.tags or after.tags[k] != v:
+                            unused_tags[k] = v
+                    if unused_tags:
+                        result['tags_unused'] = unused_tags
+                tags = {}
+                changed_tags = {}
+                for k in set(after.tags.keys()).union(set(before.tags.keys())):
+                    v0 = before.tags.get(k, None)
+                    v1 = after.tags.get(k, None)
+                    if v0 == v1:
+                        tags[k] = v0
+                    else:
+                        changed_tags[k] = (v0, v1)
+                if tags:
+                    result['tags'] = tags
+                if changed_tags:
+                    result['tags_changed'] = changed_tags
+            return result
+
         p = self.osmdata.pop(osmdata_key, None)
+        p0 = None if p is None else p.copy()
         sp = self.dataset.pop(dataset_key, None)
 
         if sp is not None:
@@ -341,6 +380,7 @@ class OsmConflator:
 
         if p.action is not None:
             self.matched.append(p)
+            self.changes.append(format_change(p0, p, sp))
 
     def match_dataset_points_smart(self):
         """Smart matching for dataset <-> OSM points.
@@ -473,8 +513,9 @@ if __name__ == '__main__':
                                      Produces an osmChange file ready to be uploaded.''')
     parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile to use')
     parser.add_argument('-o', '--osc', type=argparse.FileType('w'), default=sys.stdout, help='Output osmChange file name')
-    parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
+    parser.add_argument('-i', '--source', type=argparse.FileType('r'), help='Source file to pass to the profile dataset() function')
     parser.add_argument('--osm', type=argparse.FileType('r'), help='Instead of querying Overpass API, use this unpacked osm file')
+    parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as JSON for visualization')
     parser.add_argument('--verbose', '-v', action='count', help='Display info messages, use -vv for debugging')
     options = parser.parse_args()
 
@@ -504,3 +545,5 @@ if __name__ == '__main__':
     conflator.match()
     diff = conflator.to_osc()
     options.osc.write(diff)
+    if options.changes:
+        json.dump(conflator.changes, options.changes, ensure_ascii=False, indent=1)
