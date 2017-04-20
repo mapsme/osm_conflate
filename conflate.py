@@ -339,7 +339,7 @@ class OsmConflator:
                     # Calculate distance in meters
                     dx = (ref.lon - after.lon) * math.cos(0.5 * (ref.lat + after.lat))
                     dy = ref.lat - after.lat
-                    result['distance'] = round(63781370 * math.sqrt(dx*dx + dy*dy))
+                    result['distance'] = round(6378137 * math.sqrt(dx*dx + dy*dy))
                     # Find tags that were superseeded by OSM tags
                     unused_tags = {}
                     for k, v in ref.tags.items():
