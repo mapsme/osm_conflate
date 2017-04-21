@@ -327,41 +327,42 @@ class OsmConflator:
             return changed
 
         def format_change(before, after, ref):
-            result = {'type': after.osm_type, 'id': after.osm_id, 'lat': after.lat, 'lon': after.lon, 'action': after.action}
-            if after.action == 'create':
-                result['tags'] = after.tags
-            elif after.action == 'delete':
-                result['tags'] = after.tags
+            geometry = {'type': 'Point', 'coordinates': [after.lon, after.lat]}
+            props = {'osm_type': after.osm_type, 'osm_id': after.osm_id, 'action': after.action}
+            if after.action in ('create', 'delete'):
+                props['marker-color'] = '#ff0000' if after.action == 'delete' else '#00ff00'
+                for k, v in after.tags.items():
+                    props['tags.{}'.format(k)] = v
             else:
                 # Modify
+                props['marker-color'] = '#0000ff' if ref else '#660000'
                 if ref:
-                    result.update({'ref_lat': ref.lat, 'ref_lon': ref.lon})
                     # Calculate distance in meters
                     dx = (ref.lon - after.lon) * math.cos(0.5 * (ref.lat + after.lat))
                     dy = ref.lat - after.lat
-                    result['distance'] = round(6378137 * math.sqrt(dx*dx + dy*dy))
+                    props['ref_distance'] = round(63781370 * math.sqrt(dx*dx + dy*dy)) / 10.0
+                    props['ref_coords'] = [ref.lon, ref.lat]
                     # Find tags that were superseeded by OSM tags
                     unused_tags = {}
                     for k, v in ref.tags.items():
                         if k not in after.tags or after.tags[k] != v:
                             unused_tags[k] = v
                     if unused_tags:
-                        result['tags_unused'] = unused_tags
+                        for k, v in unused_tags.items():
+                            props['ref_unused_tags.{}'.format(k)] = v
                 # Now compare old and new OSM tags
-                tags = {}
-                changed_tags = {}
                 for k in set(after.tags.keys()).union(set(before.tags.keys())):
                     v0 = before.tags.get(k, None)
                     v1 = after.tags.get(k, None)
                     if v0 == v1:
-                        tags[k] = v0
+                        props['tags.{}'.format(k)] = v0
+                    elif v0 is None:
+                        props['tags_new.{}'.format(k)] = v1
+                    elif v1 is None:
+                        props['tags_deleted.{}'.format(k)] = v0
                     else:
-                        changed_tags[k] = (v0, v1)
-                if tags:
-                    result['tags'] = tags
-                if changed_tags:
-                    result['tags_changed'] = changed_tags
-            return result
+                        props['tags_changed.{}'.format(k)] = '{} -> {}'.format(v0, v1)
+            return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
         p = self.osmdata.pop(osmdata_key, None)
         p0 = None if p is None else p.copy()
@@ -522,7 +523,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--osc', type=argparse.FileType('w'), default=sys.stdout, help='Output osmChange file name')
     parser.add_argument('-i', '--source', type=argparse.FileType('r'), help='Source file to pass to the profile dataset() function')
     parser.add_argument('--osm', type=argparse.FileType('r'), help='Instead of querying Overpass API, use this unpacked osm file')
-    parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as JSON for visualization')
+    parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
     parser.add_argument('--verbose', '-v', action='count', help='Display info messages, use -vv for debugging')
     options = parser.parse_args()
 
@@ -553,4 +554,5 @@ if __name__ == '__main__':
     diff = conflator.to_osc()
     options.osc.write(diff)
     if options.changes:
-        json.dump(conflator.changes, options.changes, ensure_ascii=False, indent=1)
+        fc = {'type': 'FeatureCollection', 'features': conflator.changes}
+        json.dump(fc, options.changes, ensure_ascii=False, sort_keys=True, indent=1)
