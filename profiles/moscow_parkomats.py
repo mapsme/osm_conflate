@@ -16,8 +16,8 @@ dataset_id = 'mos_parking'
 query = [('amenity', 'vending_machine'), ('vending', 'parking_tickets')]
 # Use bbox from dataset points (default). False = query whole world, [minlat, minlon, maxlat, maxlon] to override
 bbox = True
-# How close OSM point should be to register a match. Default is 0.001 (~110 m)
-max_distance = 0.0003  # ~30 m
+# How close OSM point should be to register a match, in meters. Default is 100
+max_distance = 30
 # Delete objects that match query tags but not dataset? False is the default
 delete_unmatched = False
 # If set, and delete_unmatched is False, modify tags on unmatched objects instead

@@ -12,8 +12,8 @@ query = [('shop', '~supermarket|mall'), ('name', '~Ашан|АШАН')]
 master_tags = ('name', 'opening_hours', 'phone', 'website')
 # Empty dict so we don't add a fixme tag to unmatched objects
 tag_unmatched = {}
-# Coordinates are VERY approximate, so increasing max distance to ~1 km
-max_distance = 0.01
+# Coordinates are VERY approximate, so increasing max distance to 1 km
+max_distance = 1000
 
 # For some reason, functions here cannot use variables defined above
 # And defining them as "global" moves these from locals() to globals()

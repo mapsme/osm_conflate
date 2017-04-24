@@ -15,7 +15,7 @@ except ImportError:
 
 OVERPASS_SERVER = 'http://overpass-api.de/api/'
 BBOX_PADDING = 0.1  # in degrees
-MAX_DISTANCE = 0.001  # how far can object be to be considered a match. 0.001 dg is ~110 m
+MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
 
 
 class SourcePoint:
@@ -26,6 +26,12 @@ class SourcePoint:
         self.lat = lat
         self.lon = lon
         self.tags = {} if tags is None else tags
+
+    def distance(self, other):
+        """Calculate distance in meters."""
+        dx = math.radians(self.lon - other.lon) * math.cos(0.5 * math.radians(self.lat + other.lat))
+        dy = math.radians(self.lat - other.lat)
+        return 6378137 * math.sqrt(dx*dx + dy*dy)
 
     def __len__(self):
         return 2
@@ -337,10 +343,7 @@ class OsmConflator:
                 # Modify
                 props['marker-color'] = '#0000ff' if ref else '#660000'
                 if ref:
-                    # Calculate distance in meters
-                    dx = (ref.lon - after.lon) * math.cos(0.5 * (ref.lat + after.lat))
-                    dy = ref.lat - after.lat
-                    props['ref_distance'] = round(63781370 * math.sqrt(dx*dx + dy*dy)) / 10.0
+                    props['ref_distance'] = round(10 * ref.distance(after)) / 10.0
                     props['ref_coords'] = [ref.lon, ref.lat]
                     # Find tags that were superseeded by OSM tags
                     unused_tags = {}
@@ -404,13 +407,13 @@ class OsmConflator:
         """
         if not self.osmdata:
             return
-        # KDTree distance is squared, so we square the max_distance
-        max_distance = pow(self.profile.get('max_distance', MAX_DISTANCE), 2)
+        max_distance = self.profile.get('max_distance', MAX_DISTANCE)
         osm_kd = kdtree.create(list(self.osmdata.values()))
         count_matched = 0
         dist = []
         for sp, v in self.dataset.items():
-            osm_point, distance = osm_kd.search_nn(v)
+            osm_point, _ = osm_kd.search_nn(v)
+            distance = None if osm_point is None else v.distance(osm_point.data)
             if osm_point is not None and distance <= max_distance:
                 dist.append((distance, sp, osm_point.data))
         needs_sorting = True
@@ -426,8 +429,9 @@ class OsmConflator:
             for i in range(len(dist)-1, -1, -1):
                 if dist[i][2] == osm_point:
                     nearest = osm_kd.search_nn(self.dataset[dist[i][1]])
+                    distance = None if nearest is None else self.dataset[dist[i][1]].distance(nearest[0].data)
                     if nearest and nearest[1] <= max_distance:
-                        new_point, distance = nearest
+                        new_point = nearest[0]
                         dist[i] = (distance, dist[i][1], new_point.data)
                         needs_sorting = i == 0 or distance < dist[0][0]
                     else:
