@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import codecs
 import kdtree
 import logging
 import math
@@ -510,7 +511,8 @@ def read_dataset(profile, fileobj):
         # The default option is to parse the source as a JSON
         try:
             data = []
-            for item in json.load(fileobj):
+            reader = codecs.getreader('utf-8')
+            for item in json.load(reader(fileobj)):
                 data.append(SourcePoint(item['id'], item['lat'], item['lon'], item['tags']))
             return data
         except Exception:
@@ -525,7 +527,7 @@ if __name__ == '__main__':
                                      Produces an osmChange file ready to be uploaded.''')
     parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile to use')
     parser.add_argument('-o', '--osc', type=argparse.FileType('w'), default=sys.stdout, help='Output osmChange file name')
-    parser.add_argument('-i', '--source', type=argparse.FileType('r'), help='Source file to pass to the profile dataset() function')
+    parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
     parser.add_argument('--osm', type=argparse.FileType('r'), help='Instead of querying Overpass API, use this unpacked osm file')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
     parser.add_argument('--verbose', '-v', action='count', help='Display info messages, use -vv for debugging')

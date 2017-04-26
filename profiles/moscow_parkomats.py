@@ -1,4 +1,4 @@
-# Available modules: logging, requests, json, re, etree. But importing these helps catch other errors
+# Available modules: codecs, logging, requests, json, re, etree. But importing these helps catch other errors
 import json
 import re
 import logging
@@ -27,6 +27,8 @@ tag_unmatched = {
     'amenity': None,
     'was:amenity': 'vending_machine'
 }
+# Actually, after the initial upload we should not touch any existing non-matched objects
+tag_unmatched = None
 # A set of authoritative tags to replace on matched objects
 master_tags = ('zone:parking', 'ref', 'contact:phone', 'contact:website', 'operator')
 
