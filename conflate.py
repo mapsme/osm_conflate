@@ -26,7 +26,7 @@ class SourcePoint:
         self.id = str(pid)
         self.lat = lat
         self.lon = lon
-        self.tags = {} if tags is None else tags
+        self.tags = {} if tags is None else {k: str(v) for k, v in tags.items()}
 
     def distance(self, other):
         """Calculate distance in meters."""
