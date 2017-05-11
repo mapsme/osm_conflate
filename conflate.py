@@ -337,15 +337,21 @@ class OsmConflator:
             geometry = {'type': 'Point', 'coordinates': [after.lon, after.lat]}
             props = {'osm_type': after.osm_type, 'osm_id': after.osm_id, 'action': after.action}
             if after.action in ('create', 'delete'):
-                props['marker-color'] = '#ff0000' if after.action == 'delete' else '#00ff00'
+                # Red if deleted, green if added
+                props['marker-color'] = '#ff0000' if after.action == 'delete' else '#00dd00'
                 for k, v in after.tags.items():
                     props['tags.{}'.format(k)] = v
-            else:
-                # Modify
-                props['marker-color'] = '#0000ff' if ref else '#660000'
+            else:  # modified
+                # Blue if updated from dataset, dark red if retagged, dark blue if moved
+                props['marker-color'] = '#0000ee' if ref else '#660000'
                 if ref:
                     props['ref_distance'] = round(10 * ref.distance(after)) / 10.0
                     props['ref_coords'] = [ref.lon, ref.lat]
+                    if before.lon != after.lon or before.lat != after.lat:
+                        # The object was moved
+                        props['were_coords'] = [before.lon, before.lat]
+                        props['ref_distance'] = round(10 * ref.distance(before)) / 10.0
+                        props['marker-color'] = '#000066'
                     # Find tags that were superseeded by OSM tags
                     unused_tags = {}
                     for k, v in ref.tags.items():
@@ -368,6 +374,7 @@ class OsmConflator:
                         props['tags_changed.{}'.format(k)] = '{} -> {}'.format(v0, v1)
             return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
+        max_distance = self.profile.get('max_distance', MAX_DISTANCE)
         p = self.osmdata.pop(osmdata_key, None)
         p0 = None if p is None else p.copy()
         sp = self.dataset.pop(dataset_key, None)
@@ -379,6 +386,11 @@ class OsmConflator:
             else:
                 master_tags = set(self.profile.get('master_tags', required='a set of authoritative tags that replace OSM values'))
                 if update_tags(p.tags, sp.tags, master_tags):
+                    p.action = 'modify'
+                # Move a node if it is too far from the dataset point
+                if not p.is_area() and sp.distance(p) > max_distance:
+                    p.lat = sp.lat
+                    p.lon = sp.lon
                     p.action = 'modify'
             source = self.profile.get('source', required='value of "source" tag for uploaded OSM objects')
             p.tags['source'] = source
@@ -431,7 +443,7 @@ class OsmConflator:
                 if dist[i][2] == osm_point:
                     nearest = osm_kd.search_nn(self.dataset[dist[i][1]])
                     distance = None if nearest is None else self.dataset[dist[i][1]].distance(nearest[0].data)
-                    if nearest and nearest[1] <= max_distance:
+                    if nearest and distance <= max_distance:
                         new_point = nearest[0]
                         dist[i] = (distance, dist[i][1], new_point.data)
                         needs_sorting = i == 0 or distance < dist[0][0]
