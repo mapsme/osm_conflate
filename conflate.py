@@ -26,7 +26,7 @@ class SourcePoint:
         self.id = str(pid)
         self.lat = lat
         self.lon = lon
-        self.tags = {} if tags is None else {k: str(v) for k, v in tags.items()}
+        self.tags = {} if tags is None else {k.lower(): str(v) for k, v in tags.items()}
 
     def distance(self, other):
         """Calculate distance in meters."""
@@ -140,6 +140,11 @@ class Profile:
                 return value
         if required is not None:
             raise ProfileException(attr, required)
+        return default
+
+    def get_raw(self, attr, default=None):
+        if attr in self.profile:
+            return self.profile[attr]
         return default
 
 
@@ -393,6 +398,8 @@ class OsmConflator:
                     p.lon = sp.lon
                     p.action = 'modify'
             source = self.profile.get('source', required='value of "source" tag for uploaded OSM objects')
+            if 'source' in p.tags:
+                source = ';'.join([p.tags['source'], source])
             p.tags['source'] = source
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
@@ -532,6 +539,73 @@ def read_dataset(profile, fileobj):
     return profile.get('dataset', args=(fileobj,), required='returns a list of SourcePoints with the dataset')
 
 
+def transform_dataset(profile, dataset):
+    """Transforms tags in the dataset using the "transform" method in the profile
+    or the instructions in that field in string or dict form."""
+    transform = profile.get_raw('transform')
+    if not transform:
+        return
+    if callable(transform):
+        for d in dataset:
+            transform(d.tags)
+        return
+    if isinstance(transform, str):
+        # Convert string of "key=value|rule1|rule2" lines to a dict
+        lines = [line.split('=', 1) for line in transform.splitlines()]
+        transform = {l[0].strip(): l[1].strip() for l in lines}
+    if not transform or not isinstance(transform, dict):
+        return
+    for key in transform:
+        if isinstance(transform[key], str):
+            transform[key] = [x.strip() for x in transform[key].split('|')]
+
+    for d in dataset:
+        for key, rules in transform.items():
+            if not rules:
+                continue
+            value = None
+            if callable(rules):
+                # The value can be generated
+                value = rules(None if key not in d.tags else d.tags[key])
+            elif not rules[0]:
+                # Use the value of the tag
+                if key in d.tags:
+                    value = d.tags[key]
+            elif not isinstance(rules[0], str):
+                # If the value is not a string, use it
+                value = str(rules[0])
+            elif rules[0][0] == '.':
+                # Use the value from another tag
+                alt_key = rules[0][1:]
+                if alt_key in d.tags:
+                    value = d.tags[alt_key]
+            elif rules[0][0] == '>':
+                # Replace the key
+                if key in d.tags:
+                    d.tags[rules[0][1:]] = d.tags[key]
+                    del d.tags[key]
+            elif rules[0][0] == '<':
+                # Replace the key, the same but backwards
+                alt_key = rules[0][1:]
+                if alt_key in d.tags:
+                    d.tags[key] = d.tags[alt_key]
+                    del d.tags[alt_key]
+            elif rules[0] == '-':
+                # Delete the tag
+                if key in d.tags:
+                    del d.tags[key]
+            else:
+                # Take the value as written
+                value = rules[0]
+            if value is None:
+                continue
+            if isinstance(rules, list):
+                for rule in rules[1:]:
+                    if rule == 'lower':
+                        value = value.lower()
+            d.tags[key] = value
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''
                                      OSM Conflator.
@@ -561,14 +635,18 @@ if __name__ == '__main__':
     if not dataset:
         logging.error('Empty source dataset')
         sys.exit(2)
+    transform_dataset(profile, dataset)
     logging.info('Read %s items from the dataset', len(dataset))
+
     conflator = OsmConflator(profile, dataset)
     if options.osm:
         conflator.parse_osm(options.osm)
     else:
         conflator.download_osm()
     logging.info('Downloaded %s objects from OSM', len(conflator.osmdata))
+
     conflator.match()
+
     diff = conflator.to_osc()
     options.osc.write(diff)
     if options.changes:
