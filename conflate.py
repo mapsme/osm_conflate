@@ -567,6 +567,8 @@ def transform_dataset(profile, dataset):
             if callable(rules):
                 # The value can be generated
                 value = rules(None if key not in d.tags else d.tags[key])
+                if value is None and key in d.tags:
+                    del d.tags[key]
             elif not rules[0]:
                 # Use the value of the tag
                 if key in d.tags:
