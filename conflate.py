@@ -121,9 +121,15 @@ class Profile:
     is required, you will be notified of that.
     """
     def __init__(self, fileobj):
-        s = fileobj.read().replace('\r', '')
-        self.profile = {}
-        exec(s, globals(), self.profile)
+        if isinstance(fileobj, dict):
+            self.profile = fileobj
+        else:
+            s = fileobj.read().replace('\r', '')
+            if s[0] == '{':
+                self.profile = json.loads(s)
+            else:
+                self.profile = {}
+                exec(s, globals(), self.profile)
 
     def has(self, attr):
         return attr in self.profile
@@ -613,7 +619,7 @@ if __name__ == '__main__':
                                      OSM Conflator.
                                      Reads a profile with source data and conflates it with OpenStreetMap data.
                                      Produces an osmChange file ready to be uploaded.''')
-    parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile to use')
+    parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
     parser.add_argument('-o', '--osc', type=argparse.FileType('w'), default=sys.stdout, help='Output osmChange file name')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
     parser.add_argument('--osm', type=argparse.FileType('r'), help='Instead of querying Overpass API, use this unpacked osm file')
