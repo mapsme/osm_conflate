@@ -330,7 +330,7 @@ class OsmConflator:
                 if callable(weight_fn):
                     weight = weight_fn(pt)
                     if weight:
-                        pt.dist_offset = weight if abs(weight) >= 5 else weight * max_distance
+                        pt.dist_offset = weight if abs(weight) > 3 else weight * max_distance
                 self.osmdata[pt.id] = pt
 
     def register_match(self, dataset_key, osmdata_key, keep=False, retag=None):
