@@ -289,8 +289,8 @@ class OsmConflator:
                             coord[i] += nodes[nd.get('ref')][i]
                 ways[way.get('id')] = [coord[0] / count, coord[1] / count]
 
-        # For calculating priority of OSM objects
-        priority_fn = self.profile.get_raw('priority')
+        # For calculating weight of OSM objects
+        weight_fn = self.profile.get_raw('weight')
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
 
         for el in xml:
@@ -327,10 +327,10 @@ class OsmConflator:
             pt = OSMPoint(el.tag, int(el.get('id')), int(el.get('version')), coord[0], coord[1], tags)
             pt.members = members
             if pt.is_poi():
-                if callable(priority_fn):
-                    priority = priority_fn(pt)
-                    if priority:
-                        pt.dist_offset = priority if abs(priority) >= 5 else priority * max_distance
+                if callable(weight_fn):
+                    weight = weight_fn(pt)
+                    if weight:
+                        pt.dist_offset = weight if abs(weight) >= 5 else weight * max_distance
                 self.osmdata[pt.id] = pt
 
     def register_match(self, dataset_key, osmdata_key, keep=False, retag=None):
