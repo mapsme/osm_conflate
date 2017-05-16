@@ -27,12 +27,13 @@ class SourcePoint:
         self.lat = lat
         self.lon = lon
         self.tags = {} if tags is None else {k.lower(): str(v) for k, v in tags.items()}
+        self.dist_offset = 0
 
     def distance(self, other):
         """Calculate distance in meters."""
         dx = math.radians(self.lon - other.lon) * math.cos(0.5 * math.radians(self.lat + other.lat))
         dy = math.radians(self.lat - other.lat)
-        return 6378137 * math.sqrt(dx*dx + dy*dy)
+        return 6378137 * math.sqrt(dx*dx + dy*dy) - self.dist_offset
 
     def __len__(self):
         return 2
@@ -287,6 +288,10 @@ class OsmConflator:
                             coord[i] += nodes[nd.get('ref')][i]
                 ways[way.get('id')] = [coord[0] / count, coord[1] / count]
 
+        # For calculating priority of OSM objects
+        priority_fn = self.profile.get_raw('priority')
+        max_distance = self.profile.get('max_distance', MAX_DISTANCE)
+
         for el in xml:
             tags = {}
             for tag in el.findall('tag'):
@@ -321,6 +326,10 @@ class OsmConflator:
             pt = OSMPoint(el.tag, int(el.get('id')), int(el.get('version')), coord[0], coord[1], tags)
             pt.members = members
             if pt.is_poi():
+                if callable(priority_fn):
+                    priority = priority_fn(pt)
+                    if priority:
+                        pt.dist_offset = priority if abs(priority) >= 5 else priority * max_distance
                 self.osmdata[pt.id] = pt
 
     def register_match(self, dataset_key, osmdata_key, keep=False, retag=None):
@@ -431,6 +440,13 @@ class OsmConflator:
         But given the small number of objects to match, and that
         the average case complexity is ~O(n*log^2 n), this is fine.
         """
+        def search_nn_fix(kd, point):
+            nearest = kd.search_knn(point, 10)
+            if not nearest:
+                return None, None
+            nearest = [(n[0], n[0].data.distance(point)) for n in nearest]
+            return sorted(nearest, key=lambda kv: kv[1])[0]
+
         if not self.osmdata:
             return
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
@@ -438,8 +454,7 @@ class OsmConflator:
         count_matched = 0
         dist = []
         for sp, v in self.dataset.items():
-            osm_point, _ = osm_kd.search_nn(v)
-            distance = None if osm_point is None else v.distance(osm_point.data)
+            osm_point, distance = search_nn_fix(osm_kd, v)
             if osm_point is not None and distance <= max_distance:
                 dist.append((distance, sp, osm_point.data))
         needs_sorting = True
@@ -454,11 +469,9 @@ class OsmConflator:
             del dist[0]
             for i in range(len(dist)-1, -1, -1):
                 if dist[i][2] == osm_point:
-                    nearest = osm_kd.search_nn(self.dataset[dist[i][1]])
-                    distance = None if nearest is None else self.dataset[dist[i][1]].distance(nearest[0].data)
+                    nearest, distance = search_nn_fix(osm_kd, self.dataset[dist[i][1]])
                     if nearest and distance <= max_distance:
-                        new_point = nearest[0]
-                        dist[i] = (distance, dist[i][1], new_point.data)
+                        dist[i] = (distance, dist[i][1], nearest.data)
                         needs_sorting = i == 0 or distance < dist[0][0]
                     else:
                         del dist[i]
@@ -483,7 +496,7 @@ class OsmConflator:
 
         # Add unmatched dataset points
         logging.info('Adding %s unmatched dataset points', len(self.dataset))
-        for k in list(self.dataset.keys()):
+        for k in sorted(list(self.dataset.keys())):
             self.register_match(k, None)
 
         # And finally delete some or all of the remaining osm objects
