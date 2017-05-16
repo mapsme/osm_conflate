@@ -507,7 +507,7 @@ class OsmConflator:
             logging.info('Deleted %s and retagged %s unmatched objects from OSM', count_deleted, count_retagged)
 
     def to_osc(self, josm=False):
-        """Returns a string with osmChange."""
+        """Returns a string with osmChange or JOSM XML."""
         osc = etree.Element('osm' if josm else 'osmChange', version='0.6', generator='OSM Conflator')
         if josm:
             neg_id = -1
@@ -639,10 +639,9 @@ if __name__ == '__main__':
                                      Reads a profile with source data and conflates it with OpenStreetMap data.
                                      Produces an osmChange file ready to be uploaded.''')
     parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
-    parser.add_argument('-o', '--osc', type=argparse.FileType('w'), default=sys.stdout, help='Output osmChange file name')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
-    parser.add_argument('-o', '--osc', type=argparse.FileType('w'), default=sys.stdout, help='Output osmChange file name')
-    parser.add_argument('-j', '--josm', action='store_true', help='Produce a JOSM XML instead of osmChange')
+    parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout, help='Output OSM XML file name')
+    parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
     parser.add_argument('--osm', type=argparse.FileType('r'), help='Instead of querying Overpass API, use this unpacked osm file')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
     parser.add_argument('--verbose', '-v', action='count', help='Display info messages, use -vv for debugging')
@@ -676,8 +675,8 @@ if __name__ == '__main__':
 
     conflator.match()
 
-    diff = conflator.to_osc(options.josm)
-    options.osc.write(diff)
+    diff = conflator.to_osc(not options.osc)
+    options.output.write(diff)
     if options.changes:
         fc = {'type': 'FeatureCollection', 'features': conflator.changes}
         json.dump(fc, options.changes, ensure_ascii=False, sort_keys=True, indent=1)
