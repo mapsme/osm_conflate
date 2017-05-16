@@ -188,7 +188,7 @@ class OsmConflator:
             else:
                 q = '"{}"="{}"'.format(t[0], t[1])
             tag_str += '[' + q + ']'
-        query = '[out:json][timeout:120];('
+        query = '[out:xml][timeout:120];('
         bbox_str = '' if bbox is None else '(' + ','.join([str(x) for x in bbox]) + ')'
         for t in ('node', 'way', 'relation'):
             query += t + tag_str + bbox_str + ';'
@@ -258,39 +258,34 @@ class OsmConflator:
                 else:
                     logging.error('Error message: %s', r.text)
                 raise IOError()
-            for el in r.json()['elements']:
-                if 'tags' not in el:
-                    continue
-                if 'center' in el:
-                    for ll in ('lat', 'lon'):
-                        el[ll] = el['center'][ll]
-                if self.check_against_profile_tags(el['tags']):
-                    pt = OSMPoint(el['type'], el['id'], el['version'], el['lat'], el['lon'], el['tags'])
-                    if 'nodes' in el:
-                        pt.members = el['nodes']
-                    elif 'members' in el:
-                        pt.members = [(x['type'], x['ref'], x['role']) for x in el['members']]
-                    if pt.is_poi():
-                        self.osmdata[pt.id] = pt
+            self.parse_osm(r.content)
 
     def parse_osm(self, fileobj):
         """Parses an OSM XML file into the "osmdata" field. For ways and relations,
         finds the center. Drops objects that do not match the overpass query tags
         (see "check_against_profile_tags" method)."""
-        xml = etree.parse(fileobj).getroot()
+        if isinstance(fileobj, bytes):
+            xml = etree.fromstring(fileobj)
+        else:
+            xml = etree.parse(fileobj).getroot()
         nodes = {}
         for nd in xml.findall('node'):
             nodes[nd.get('id')] = (float(nd.get('lat')), float(nd.get('lon')))
         ways = {}
         for way in xml.findall('way'):
-            coord = [0, 0]
-            count = 0
-            for nd in way.findall('nd'):
-                if nd.get('id') in nodes:
-                    count += 1
-                    for i in range(len(coord)):
-                        coord[i] += nodes[nd.get('ref')][i]
-            ways[way.get('id')] = [coord[0] / count, coord[1] / count]
+            center = way.find('center')
+            if center is not None:
+                ways[way.get('id')] = [float(center.get('lat')), float(center.get('lon'))]
+            else:
+                logging.warning('Way %s does not have a center', way.get('id'))
+                coord = [0, 0]
+                count = 0
+                for nd in way.findall('nd'):
+                    if nd.get('id') in nodes:
+                        count += 1
+                        for i in range(len(coord)):
+                            coord[i] += nodes[nd.get('ref')][i]
+                ways[way.get('id')] = [coord[0] / count, coord[1] / count]
 
         for el in xml:
             tags = {}
@@ -306,20 +301,24 @@ class OsmConflator:
                 coord = ways[el.get('id')]
                 members = [nd.get('ref') for nd in el.findall('nd')]
             elif el.tag == 'relation':
-                coord = [0, 0]
-                count = 0
-                for m in el.findall('member'):
-                    if m.get('type') == 'node' and m.get('ref') in nodes:
-                        count += 1
-                        for i in range(len(coord)):
-                            coord[i] += nodes[m.get('ref')][i]
-                    elif m.get('type') == 'way' and m.get('ref') in ways:
-                        count += 1
-                        for i in range(len(coord)):
-                            coord[i] += ways[m.get('ref')][i]
-                coord = [coord[0] / count, coord[1] / count]
+                center = el.find('center')
+                if center is not None:
+                    coord = [float(center.get('lat')), float(center.get('lon'))]
+                else:
+                    coord = [0, 0]
+                    count = 0
+                    for m in el.findall('member'):
+                        if m.get('type') == 'node' and m.get('ref') in nodes:
+                            count += 1
+                            for i in range(len(coord)):
+                                coord[i] += nodes[m.get('ref')][i]
+                        elif m.get('type') == 'way' and m.get('ref') in ways:
+                            count += 1
+                            for i in range(len(coord)):
+                                coord[i] += ways[m.get('ref')][i]
+                    coord = [coord[0] / count, coord[1] / count]
                 members = [(m.get('type'), m.get('ref'), m.get('role')) for m in el.findall('member')]
-            pt = OSMPoint(el.tag, el.get('id'), el.get('version'), coord[0], coord[1], tags)
+            pt = OSMPoint(el.tag, int(el.get('id')), int(el.get('version')), coord[0], coord[1], tags)
             pt.members = members
             if pt.is_poi():
                 self.osmdata[pt.id] = pt
@@ -506,6 +505,16 @@ class OsmConflator:
                     self.register_match(None, k, keep=not delete_unmatched, retag=retag)
             logging.info('Deleted %s and retagged %s unmatched objects from OSM', count_deleted, count_retagged)
 
+    def backup_osm(self):
+        """Writes OSM data as-is."""
+        osm = etree.Element('osm', version='0.6', generator='OSM Conflator')
+        for osmel in self.osmdata.values():
+            el = osmel.to_xml()
+            if osmel.osm_type != 'node':
+                etree.SubElement(el, 'center', lat=str(osmel.lat), lon=str(osmel.lon))
+            osm.append(el)
+        return "<?xml version='1.0' encoding='utf-8'?>\n" + etree.tostring(osm, encoding='utf-8').decode('utf-8')
+
     def to_osc(self, josm=False):
         """Returns a string with osmChange or JOSM XML."""
         osc = etree.Element('osm' if josm else 'osmChange', version='0.6', generator='OSM Conflator')
@@ -643,6 +652,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout, help='Output OSM XML file name')
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
     parser.add_argument('--osm', type=argparse.FileType('r'), help='Instead of querying Overpass API, use this unpacked osm file')
+    parser.add_argument('--backup-osm', dest='backup', type=argparse.FileType('w'), help='Store the downloaded OSM data for testing')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
     parser.add_argument('--verbose', '-v', action='count', help='Display info messages, use -vv for debugging')
     options = parser.parse_args()
@@ -671,6 +681,8 @@ if __name__ == '__main__':
         conflator.parse_osm(options.osm)
     else:
         conflator.download_osm()
+    if len(conflator.osmdata) > 0 and options.backup:
+        options.backup.write(conflator.backup_osm())
     logging.info('Downloaded %s objects from OSM', len(conflator.osmdata))
 
     conflator.match()
