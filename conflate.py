@@ -161,6 +161,7 @@ class OsmConflator:
         self.matched = []
         self.changes = []
         self.profile = profile
+        self.source = self.profile.get('source', required='value of "source" tag for uploaded OSM objects')
         if self.profile.get('no_dataset_id', False):
             self.ref = None
         else:
@@ -397,10 +398,10 @@ class OsmConflator:
                     p.lat = sp.lat
                     p.lon = sp.lon
                     p.action = 'modify'
-            source = self.profile.get('source', required='value of "source" tag for uploaded OSM objects')
             if 'source' in p.tags:
-                source = ';'.join([p.tags['source'], source])
-            p.tags['source'] = source
+                p.tags['source'] = ';'.join([p.tags['source'], self.source])
+            else:
+                p.tags['source'] = self.source
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
         elif keep or p.is_area():
@@ -499,13 +500,31 @@ class OsmConflator:
                     self.register_match(None, k, keep=not delete_unmatched, retag=retag)
             logging.info('Deleted %s and retagged %s unmatched objects from OSM', count_deleted, count_retagged)
 
-    def to_osc(self):
+    def to_osc(self, josm=False):
         """Returns a string with osmChange."""
-        osc = etree.Element('osmChange', version='0.6', generator='OSM Conflator')
+        osc = etree.Element('osm' if josm else 'osmChange', version='0.6', generator='OSM Conflator')
+        if josm:
+            neg_id = -1
+            changeset = etree.SubElement(osc, 'changeset')
+            ch_tags = {
+                'source': self.source,
+                'created_by': 'OSM Conflator',
+                'type': 'import'
+            }
+            for k, v in ch_tags.items():
+                etree.SubElement(changeset, 'tag', k=k, v=v)
         for osmel in self.matched:
             if osmel.action is not None:
                 el = osmel.to_xml()
-                etree.SubElement(osc, osmel.action).append(el)
+                if josm:
+                    if osmel.action == 'create':
+                        el.set('id', str(neg_id))
+                        neg_id -= 1
+                    else:
+                        el.set('action', osmel.action)
+                    osc.append(el)
+                else:
+                    etree.SubElement(osc, osmel.action).append(el)
         return "<?xml version='1.0' encoding='utf-8'?>\n" + etree.tostring(osc, encoding='utf-8').decode('utf-8')
 
 
@@ -614,8 +633,9 @@ if __name__ == '__main__':
                                      Reads a profile with source data and conflates it with OpenStreetMap data.
                                      Produces an osmChange file ready to be uploaded.''')
     parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile to use')
-    parser.add_argument('-o', '--osc', type=argparse.FileType('w'), default=sys.stdout, help='Output osmChange file name')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
+    parser.add_argument('-o', '--osc', type=argparse.FileType('w'), default=sys.stdout, help='Output osmChange file name')
+    parser.add_argument('-j', '--josm', action='store_true', help='Produce a JOSM XML instead of osmChange')
     parser.add_argument('--osm', type=argparse.FileType('r'), help='Instead of querying Overpass API, use this unpacked osm file')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
     parser.add_argument('--verbose', '-v', action='count', help='Display info messages, use -vv for debugging')
@@ -649,7 +669,7 @@ if __name__ == '__main__':
 
     conflator.match()
 
-    diff = conflator.to_osc()
+    diff = conflator.to_osc(options.josm)
     options.osc.write(diff)
     if options.changes:
         fc = {'type': 'FeatureCollection', 'features': conflator.changes}
