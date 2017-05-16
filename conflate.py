@@ -5,6 +5,7 @@ import kdtree
 import logging
 import math
 import requests
+import os
 import sys
 from io import BytesIO
 import json  # for profiles
@@ -659,13 +660,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''
                                      OSM Conflator.
                                      Reads a profile with source data and conflates it with OpenStreetMap data.
-                                     Produces an osmChange file ready to be uploaded.''')
+                                     Produces an JOSM XML file ready to be uploaded.''')
     parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout, help='Output OSM XML file name')
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
-    parser.add_argument('--osm', type=argparse.FileType('r'), help='Instead of querying Overpass API, use this unpacked osm file')
-    parser.add_argument('--backup-osm', dest='backup', type=argparse.FileType('w'), help='Store the downloaded OSM data for testing')
+    parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
     parser.add_argument('--verbose', '-v', action='count', help='Display info messages, use -vv for debugging')
     options = parser.parse_args()
@@ -690,12 +690,14 @@ if __name__ == '__main__':
     logging.info('Read %s items from the dataset', len(dataset))
 
     conflator = OsmConflator(profile, dataset)
-    if options.osm:
-        conflator.parse_osm(options.osm)
+    if options.osm and os.path.exists(options.osm):
+        with open(options.osm, 'r') as f:
+            conflator.parse_osm(f)
     else:
         conflator.download_osm()
-    if len(conflator.osmdata) > 0 and options.backup:
-        options.backup.write(conflator.backup_osm())
+        if len(conflator.osmdata) > 0 and options.osm:
+            with open(options.osm, 'w') as f:
+                f.write(conflator.backup_osm())
     logging.info('Downloaded %s objects from OSM', len(conflator.osmdata))
 
     conflator.match()
