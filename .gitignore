@@ -1,5 +1,6 @@
 *.swp
 *.osc
+*.osm
 *.zip
 *.json
 *.gz
