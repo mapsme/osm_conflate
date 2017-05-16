@@ -2,10 +2,10 @@
 import json
 import re
 import logging
+import zipfile
 
 # Verify this at http://data.mos.ru/opendata/1421/passport ("Download .json")
-# Disabled since the link returns a zip file and not a plain json
-# download_url = 'http://op.mos.ru/EHDWSREST/catalog/export/get?id=89786'
+download_url = 'https://op.mos.ru/EHDWSREST/catalog/export/get?id=216775'
 
 # What will be put into "source" tags. Lower case please
 source = 'dit.mos.ru'
@@ -35,7 +35,8 @@ master_tags = ('zone:parking', 'ref', 'contact:phone', 'contact:website', 'opera
 
 # A list of SourcePoint objects. Initialize with (id, lat, lon, {tags}).
 def dataset(fileobj):
-    source = json.loads(fileobj.read().decode('cp1251'))
+    zf = zipfile.ZipFile(fileobj)
+    source = json.loads(zf.read(zf.namelist()[0]).decode('cp1251'))
     RE_NUM4 = re.compile(r'\d{4,6}')
     data = []
     for el in source:

@@ -8,8 +8,9 @@ import requests
 import os
 import sys
 from io import BytesIO
-import json  # for profiles
-import re    # for profiles
+import json    # for profiles
+import re      # for profiles
+import zipfile # for profiles
 try:
     from lxml import etree
 except ImportError:
@@ -414,7 +415,8 @@ class OsmConflator:
                     p.lon = sp.lon
                     p.action = 'modify'
             if 'source' in p.tags:
-                p.tags['source'] = ';'.join([p.tags['source'], self.source])
+                if self.source not in p.tags['source']:
+                    p.tags['source'] = ';'.join([p.tags['source'], self.source])
             else:
                 p.tags['source'] = self.source
             if self.ref is not None:
