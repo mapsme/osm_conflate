@@ -197,7 +197,7 @@ class OsmConflator:
             query += t + tag_str + bbox_str + ';'
             if self.ref is not None:
                 query += t + '["' + self.ref + '"];'
-        query += '); out meta center;'
+        query += '); out meta qt center;'
         return query
 
     def get_dataset_bbox(self):
