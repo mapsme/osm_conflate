@@ -126,13 +126,17 @@ class Profile:
     def __init__(self, fileobj):
         if isinstance(fileobj, dict):
             self.profile = fileobj
-        else:
+        elif hasattr(fileobj, 'read'):
             s = fileobj.read().replace('\r', '')
             if s[0] == '{':
                 self.profile = json.loads(s)
             else:
                 self.profile = {}
                 exec(s, globals(), self.profile)
+        else:
+            # Got a class
+            self.profile = {name: getattr(fileobj, name)
+                            for name in dir(fileobj) if not name.startswith('_')}
 
     def has(self, attr):
         return attr in self.profile
@@ -658,12 +662,13 @@ def transform_dataset(profile, dataset):
             d.tags[key] = value
 
 
-if __name__ == '__main__':
+def run(profile=None):
     parser = argparse.ArgumentParser(description='''
                                      OSM Conflator.
                                      Reads a profile with source data and conflates it with OpenStreetMap data.
                                      Produces an JOSM XML file ready to be uploaded.''')
-    parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
+    if not profile:
+        parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout, help='Output OSM XML file name')
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
@@ -681,8 +686,9 @@ if __name__ == '__main__':
     logging.basicConfig(level=log_level, format='%(asctime)s %(message)s', datefmt='%H:%M:%S')
     logging.getLogger("requests").setLevel(logging.WARNING)
 
-    logging.debug('Loading profile %s', options.profile)
-    profile = Profile(options.profile)
+    if not profile:
+        logging.debug('Loading profile %s', options.profile)
+    profile = Profile(profile or options.profile)
 
     dataset = read_dataset(profile, options.source)
     if not dataset:
@@ -709,3 +715,7 @@ if __name__ == '__main__':
     if options.changes:
         fc = {'type': 'FeatureCollection', 'features': conflator.changes}
         json.dump(fc, options.changes, ensure_ascii=False, sort_keys=True, indent=1)
+
+
+if __name__ == '__main__':
+    run()
