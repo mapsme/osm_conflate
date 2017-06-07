@@ -184,6 +184,7 @@ class OsmConflator:
         self.changes = []
         self.profile = profile
         self.source = self.profile.get('source', required='value of "source" tag for uploaded OSM objects')
+        self.add_source_tag = self.profile.get('add_source', False)
         if self.profile.get('no_dataset_id', False):
             self.ref = None
         else:
@@ -517,11 +518,12 @@ class OsmConflator:
                     p.lat = sp.lat
                     p.lon = sp.lon
                     p.action = 'modify'
-            if 'source' in p.tags:
-                if self.source not in p.tags['source']:
-                    p.tags['source'] = ';'.join([p.tags['source'], self.source])
-            else:
-                p.tags['source'] = self.source
+            if self.add_source_tag:
+                if 'source' in p.tags:
+                    if self.source not in p.tags['source']:
+                        p.tags['source'] = ';'.join([p.tags['source'], self.source])
+                else:
+                    p.tags['source'] = self.source
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
         elif keep or p.is_area():
