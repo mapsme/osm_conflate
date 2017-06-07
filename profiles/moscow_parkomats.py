@@ -2,10 +2,25 @@
 import json
 import re
 import logging
+import requests
 import zipfile
 
-# Verify this at http://data.mos.ru/opendata/1421/passport ("Download .json")
-download_url = 'https://op.mos.ru/EHDWSREST/catalog/export/get?id=216775'
+
+def download_url(mos_dataset_id=1421):
+    r = requests.get('https://data.mos.ru/api/datasets/expformats/?datasetId={}'.format(mos_dataset_id))
+    if r.status_code != 200 or len(r.content) == 0:
+        logging.error('Could not get URL for dataset: %s %s', r.status_code, r.text)
+        logging.error('Please check http://data.mos.ru/opendata/{}/passport'.format(mos_dataset_id))
+        return None
+    url = [x for x in r.json() if x['Format'] == 'json'][0]
+    version = '?'
+    title = 'dataset'
+    r = requests.get('https://data.mos.ru/apiproxy/opendata/1421/meta.json'.format(mos_dataset_id))
+    if r.status_code == 200:
+        title = r.json()['Title']
+        version = r.json()['VersionNumber']
+    logging.info('Downloading %s %s from %s', title, version, url['GenerationStart'])
+    return 'https://op.mos.ru/EHDWSREST/catalog/export/get?id=' + url['EhdId']
 
 # What will be put into "source" tags. Lower case please
 source = 'dit.mos.ru'
