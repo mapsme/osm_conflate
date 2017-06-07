@@ -8,6 +8,7 @@ import requests
 import os
 import sys
 from io import BytesIO
+from .version import __version__
 import json    # for profiles
 import re      # for profiles
 import zipfile # for profiles
@@ -16,6 +17,7 @@ try:
 except ImportError:
     import xml.etree.ElementTree as etree
 
+TITLE = 'OSM Conflator ' + __version__
 OVERPASS_SERVER = 'http://overpass-api.de/api/'
 BBOX_PADDING = 0.003  # in degrees, ~330 m default
 MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
@@ -633,7 +635,7 @@ class OsmConflator:
 
     def backup_osm(self):
         """Writes OSM data as-is."""
-        osm = etree.Element('osm', version='0.6', generator='OSM Conflator')
+        osm = etree.Element('osm', version='0.6', generator=TITLE)
         for osmel in self.osmdata.values():
             el = osmel.to_xml()
             if osmel.osm_type != 'node':
@@ -643,13 +645,13 @@ class OsmConflator:
 
     def to_osc(self, josm=False):
         """Returns a string with osmChange or JOSM XML."""
-        osc = etree.Element('osm' if josm else 'osmChange', version='0.6', generator='OSM Conflator')
+        osc = etree.Element('osm' if josm else 'osmChange', version='0.6', generator=TITLE)
         if josm:
             neg_id = -1
             changeset = etree.SubElement(osc, 'changeset')
             ch_tags = {
                 'source': self.source,
-                'created_by': 'OSM Conflator',
+                'created_by': TITLE,
                 'type': 'import'
             }
             for k, v in ch_tags.items():
@@ -770,9 +772,9 @@ def transform_dataset(profile, dataset):
 
 def run(profile=None):
     parser = argparse.ArgumentParser(description='''
-                                     OSM Conflator.
+                                     {}.
                                      Reads a profile with source data and conflates it with OpenStreetMap data.
-                                     Produces an JOSM XML file ready to be uploaded.''')
+                                     Produces an JOSM XML file ready to be uploaded.'''.format(TITLE))
     if not profile:
         parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
@@ -789,8 +791,9 @@ def run(profile=None):
         log_level = logging.INFO
     else:
         log_level = logging.WARNING
-    logging.basicConfig(level=log_level, format='%(asctime)s %(message)s', datefmt='%H:%M:%S')
+    logging.basicConfig(level=log_level, format='%(asctime)s %(name)s %(message)s', datefmt='%H:%M:%S')
     logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     if not profile:
         logging.debug('Loading profile %s', options.profile)

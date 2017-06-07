@@ -5,5 +5,9 @@
 *.json
 *.gz
 *.csv
+*.pyc
 private/
+data/
 __pycache__/
+*.egg*
+build/
