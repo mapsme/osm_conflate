@@ -17,7 +17,6 @@ except ImportError:
     import xml.etree.ElementTree as etree
 
 OVERPASS_SERVER = 'http://overpass-api.de/api/'
-MAX_OVERPASS_REQUESTS = 8
 BBOX_PADDING = 0.003  # in degrees, ~330 m default
 MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
 
@@ -190,27 +189,33 @@ class OsmConflator:
         else:
             self.ref = 'ref:' + self.profile.get('dataset_id', required='A fairly unique id of the dataset to query OSM')
 
-    def construct_overpass_query(self, bbox=None):
+    def construct_overpass_query(self, bboxes=None):
         """Constructs an Overpass API query from the "query" list in the profile.
         (k, v) turns into [k=v], (k,) into [k], (k, None) into [!k], (k, "~v") into [k~v]."""
         tags = self.profile.get('query', required="a list of tuples. E.g. [('amenity', 'cafe'), ('name', '~Mc.*lds')]")
-        tag_str = ''
-        for t in tags:
-            if len(t) == 1:
-                q = '"{}"'.format(t[0])
-            elif t[1] is None or len(t[1]) == 0:
-                q = '"!{}"'.format(t[0])
-            elif t[1][0] == '~':
-                q = '"{}"~"{}"'.format(t[0], t[1][1:])
-            else:
-                q = '"{}"="{}"'.format(t[0], t[1])
-            tag_str += '[' + q + ']'
+        if isinstance(tags, str):
+            tag_str = tags
+        else:
+            tag_str = ''
+            for t in tags:
+                if len(t) == 1:
+                    q = '"{}"'.format(t[0])
+                elif t[1] is None or len(t[1]) == 0:
+                    q = '"!{}"'.format(t[0])
+                elif t[1][0] == '~':
+                    q = '"{}"~"{}"'.format(t[0], t[1][1:])
+                else:
+                    q = '"{}"="{}"'.format(t[0], t[1])
+                tag_str += '[' + q + ']'
+
         timeout = self.profile.get('overpass_timeout', 120)
         query = '[out:xml]{};('.format('' if timeout is None else '[timeout:{}]'.format(timeout))
-        bbox_str = '' if bbox is None else '(' + ','.join([str(x) for x in bbox]) + ')'
-        for t in ('node', 'way', 'relation'):
-            query += t + tag_str + bbox_str + ';'
-            if self.ref is not None:
+        for bbox in bboxes:
+            bbox_str = '' if bbox is None else '(' + ','.join([str(x) for x in bbox]) + ')'
+            for t in ('node', 'way', 'relation["type"="multipolygon"]'):
+                query += t + tag_str + bbox_str + ';'
+        if self.ref is not None:
+            for t in ('node', 'way', 'relation'):
                 query += t + '["' + self.ref + '"];'
         query += '); out meta qt center;'
         return query
@@ -295,9 +300,10 @@ class OsmConflator:
             return new_box
 
         # height, width, lats, lons
+        max_bboxes = self.profile.get('max_request_boxes', 8)
         boxes = [[lats[-1][0]-lats[0][0], lons[-1][0]-lons[0][0], lats, lons]]
         initial_area = boxes[0][0] * boxes[0][1]
-        while len(boxes) < MAX_OVERPASS_REQUESTS and len(boxes) <= len(self.dataset):
+        while len(boxes) < max_bboxes and len(boxes) <= len(self.dataset):
             candidate_box = None
             area = 0
             point_id = None
@@ -353,19 +359,18 @@ class OsmConflator:
         else:
             bboxes = self.split_into_bboxes()
 
-        for b in bboxes:
-            query = self.construct_overpass_query(b)
-            logging.debug('Overpass query: %s', query)
-            r = requests.get(OVERPASS_SERVER + 'interpreter', {'data': query})
-            if r.status_code != 200:
-                logging.error('Failed to download data from Overpass API: %s', r.status_code)
-                if 'rate_limited' in r.text:
-                    r = requests.get(OVERPASS_SERVER + 'status')
-                    logging.warning('Seems like you are rate limited. API status:\n%s', r.text)
-                else:
-                    logging.error('Error message: %s', r.text)
-                raise IOError()
-            self.parse_osm(r.content)
+        query = self.construct_overpass_query(bboxes)
+        logging.debug('Overpass query: %s', query)
+        r = requests.get(OVERPASS_SERVER + 'interpreter', {'data': query})
+        if r.status_code != 200:
+            logging.error('Failed to download data from Overpass API: %s', r.status_code)
+            if 'rate_limited' in r.text:
+                r = requests.get(OVERPASS_SERVER + 'status')
+                logging.warning('Seems like you are rate limited. API status:\n%s', r.text)
+            else:
+                logging.error('Error message: %s', r.text)
+            raise IOError()
+        self.parse_osm(r.content)
 
     def parse_osm(self, fileobj):
         """Parses an OSM XML file into the "osmdata" field. For ways and relations,

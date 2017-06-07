@@ -6,3 +6,4 @@
 *.gz
 *.csv
 private/
+__pycache__/
