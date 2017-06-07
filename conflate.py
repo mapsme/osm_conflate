@@ -17,7 +17,8 @@ except ImportError:
     import xml.etree.ElementTree as etree
 
 OVERPASS_SERVER = 'http://overpass-api.de/api/'
-BBOX_PADDING = 0.1  # in degrees
+MAX_OVERPASS_REQUESTS = 8
+BBOX_PADDING = 0.003  # in degrees, ~330 m default
 MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
 
 
@@ -230,11 +231,99 @@ class OsmConflator:
         Splits the dataset into multiple bboxes to lower load on the overpass api.
 
         Returns a list of tuples (minlat, minlon, maxlat, maxlon).
-
-        Not implemented for now, returns the single big bbox. Not sure if needed.
         """
-        # TODO
-        return [self.get_dataset_bbox()]
+        if len(self.dataset) <= 1:
+            return [self.get_dataset_bbox()]
+
+        # coord, alt coord, total w/h to the left/bottom, total w/h to the right/top
+        lons = sorted([[d.lon, d.lat, 0, 0] for d in self.dataset.values()])
+        lats = sorted([[d.lat, d.lon, 0, 0] for d in self.dataset.values()])
+
+        def update_side_dimensions(ar):
+            """For each point, calculates the maximum and
+            minimum bound for all points left and right."""
+            fwd_top = fwd_bottom = ar[0][1]
+            back_top = back_bottom = ar[-1][1]
+            for i in range(len(ar)):
+                fwd_top = max(fwd_top, ar[i][1])
+                fwd_bottom = min(fwd_bottom, ar[i][1])
+                ar[i][2] = fwd_top - fwd_bottom
+                back_top = max(back_top, ar[-i-1][1])
+                back_bottom = min(back_bottom, ar[-i-1][1])
+                ar[-i-1][3] = back_top - back_bottom
+
+        def find_max_gap(ar, h):
+            """Select an interval between points, which would give
+            the maximum area if split there."""
+            max_id = None
+            max_gap = 0
+            for i in range(len(ar) - 1):
+                # "Extra" variables are for area to the left and right
+                # that would be freed after splitting.
+                extra_left = (ar[i][0]-ar[0][0]) * (h-ar[i][2])
+                extra_right = (ar[-1][0]-ar[i+1][0]) * (h-ar[i+1][3])
+                # Gap is the area of the column between points i and i+1
+                # plus extra areas to the left and right.
+                gap = (ar[i+1][0] - ar[i][0]) * h + extra_left + extra_right
+                if gap > max_gap:
+                    max_id = i
+                    max_gap = gap
+            return max_id, max_gap
+
+        def get_bbox(b, pad=0):
+            """Returns a list of [min_lat, min_lon, max_lat, max_lon] for a box."""
+            return [b[2][0][0]-pad, b[3][0][0]-pad, b[2][-1][0]+pad, b[3][-1][0]+pad]
+
+        def split(box, point_array, point_id):
+            """Split the box over axis point_array at point point_id...point_id+1.
+            Modifies the box in-place and returns a new box."""
+            alt_array = 5 - point_array  # 3->2, 2->3
+            points = box[point_array][point_id+1:]
+            del box[point_array][point_id+1:]
+            alt = {True: [], False: []}  # True means point is in new box
+            for p in box[alt_array]:
+                alt[(p[1], p[0]) >= (points[0][0], points[0][1])].append(p)
+
+            new_box = [None] * 4
+            new_box[point_array] = points
+            new_box[alt_array] = alt[True]
+            box[alt_array] = alt[False]
+            for i in range(2):
+                box[i] = box[i+2][-1][0] - box[i+2][0][0]
+                new_box[i] = new_box[i+2][-1][0] - new_box[i+2][0][0]
+            return new_box
+
+        # height, width, lats, lons
+        boxes = [[lats[-1][0]-lats[0][0], lons[-1][0]-lons[0][0], lats, lons]]
+        initial_area = boxes[0][0] * boxes[0][1]
+        while len(boxes) < MAX_OVERPASS_REQUESTS and len(boxes) <= len(self.dataset):
+            candidate_box = None
+            area = 0
+            point_id = None
+            point_array = None
+            for box in boxes:
+                for ar in (2, 3):
+                    # Find a box and an axis for splitting that would decrease the area the most
+                    update_side_dimensions(box[ar])
+                    max_id, max_area = find_max_gap(box[ar], box[3-ar])
+                    if max_area > area:
+                        area = max_area
+                        candidate_box = box
+                        point_id = max_id
+                        point_array = ar
+            if area * 100 < initial_area:
+                # Stop splitting when the area decrease is less than 1%
+                break
+            logging.debug('Splitting bbox %s at %s %s-%s; area decrease %s%%',
+                          get_bbox(candidate_box),
+                          'longs' if point_array == 3 else 'lats',
+                          candidate_box[point_array][point_id][0],
+                          candidate_box[point_array][point_id+1][0],
+                          round(100*area/initial_area))
+            boxes.append(split(candidate_box, point_array, point_id))
+
+        padding = self.profile.get('bbox_padding', BBOX_PADDING)
+        return [get_bbox(b, padding) for b in boxes]
 
     def check_against_profile_tags(self, tags):
         qualifies = self.profile.get('qualifies', args=tags)
