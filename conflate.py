@@ -54,6 +54,10 @@ class SourcePoint:
     def __hash__(self):
         return hash(self.id)
 
+    def __repr__(self):
+        return 'SourcePoint({}, {}, {}, offset={}, tags={})'.format(
+            self.id, self.lat, self.lon, self.dist_offset, self.tags)
+
 
 class OSMPoint(SourcePoint):
     """An OSM points is a SourcePoint with a few extra fields.
@@ -103,6 +107,10 @@ class OSMPoint(SourcePoint):
                 for i, n in enumerate(('type', 'ref', 'role')):
                     m.set(n, str(member[i]))
         return el
+
+    def __repr__(self):
+        return 'OSMPoint({} {} v{}, {}, {}, action={}, tags={})'.format(
+            self.osm_type, self.osm_id, self.version, self.lat, self.lon, self.action, self.tags)
 
 
 class ProfileException(Exception):
@@ -195,7 +203,8 @@ class OsmConflator:
             else:
                 q = '"{}"="{}"'.format(t[0], t[1])
             tag_str += '[' + q + ']'
-        query = '[out:xml][timeout:120];('
+        timeout = self.profile.get('overpass_timeout', 120)
+        query = '[out:xml]{};('.format('' if timeout is None else '[timeout:{}]'.format(timeout))
         bbox_str = '' if bbox is None else '(' + ','.join([str(x) for x in bbox]) + ')'
         for t in ('node', 'way', 'relation'):
             query += t + tag_str + bbox_str + ';'
@@ -207,12 +216,13 @@ class OsmConflator:
     def get_dataset_bbox(self):
         """Plain iterates over the dataset and returns the bounding box
         that encloses it."""
+        padding = self.profile.get('bbox_padding', BBOX_PADDING)
         bbox = [90.0, 180.0, -90.0, -180.0]
         for p in self.dataset.values():
-            bbox[0] = min(bbox[0], p.lat - BBOX_PADDING)
-            bbox[1] = min(bbox[1], p.lon - BBOX_PADDING)
-            bbox[2] = max(bbox[2], p.lat + BBOX_PADDING)
-            bbox[3] = max(bbox[3], p.lon + BBOX_PADDING)
+            bbox[0] = min(bbox[0], p.lat - padding)
+            bbox[1] = min(bbox[1], p.lon - padding)
+            bbox[2] = max(bbox[2], p.lat + padding)
+            bbox[3] = max(bbox[3], p.lon + padding)
         return bbox
 
     def split_into_bboxes(self):
