@@ -10,8 +10,8 @@ See `the OSM wiki page`_ for detailed description and instructions.
 Installation
 ------------
 
-Clone this repository, and from inside it run
-``pip install -r requirements.txt``.
+Run
+``pip install osm_conflate``.
 
 Profiles
 --------
@@ -27,11 +27,11 @@ For a simplest case, run:
 
 ::
 
-    ./conflate.py <profile.py>
+    conflate <profile.py> -o result.osm
 
 You might want to add ``-v`` to get status messages, and other arguments
 to pass a dataset file or write the resulting osmChange somewhere. Run
-``./conflate.py -h`` to see a list of arguments.
+``conflate -h`` to see a list of arguments.
 
 Uploading to OpenStreetMap
 --------------------------
