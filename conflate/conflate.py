@@ -791,7 +791,7 @@ def run(profile=None):
         log_level = logging.INFO
     else:
         log_level = logging.WARNING
-    logging.basicConfig(level=log_level, format='%(asctime)s %(name)s %(message)s', datefmt='%H:%M:%S')
+    logging.basicConfig(level=log_level, format='%(asctime)s %(message)s', datefmt='%H:%M:%S')
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
