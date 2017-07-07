@@ -184,17 +184,20 @@ class OsmConflator:
         self.matched = []
         self.changes = []
         self.profile = profile
-        self.source = self.profile.get('source', required='value of "source" tag for uploaded OSM objects')
+        self.source = self.profile.get(
+            'source', required='value of "source" tag for uploaded OSM objects')
         self.add_source_tag = self.profile.get('add_source', False)
         if self.profile.get('no_dataset_id', False):
             self.ref = None
         else:
-            self.ref = 'ref:' + self.profile.get('dataset_id', required='A fairly unique id of the dataset to query OSM')
+            self.ref = 'ref:' + self.profile.get(
+                'dataset_id', required='A fairly unique id of the dataset to query OSM')
 
     def construct_overpass_query(self, bboxes=None):
         """Constructs an Overpass API query from the "query" list in the profile.
         (k, v) turns into [k=v], (k,) into [k], (k, None) into [!k], (k, "~v") into [k~v]."""
-        tags = self.profile.get('query', required="a list of tuples. E.g. [('amenity', 'cafe'), ('name', '~Mc.*lds')]")
+        tags = self.profile.get(
+            'query', required="a list of tuples. E.g. [('amenity', 'cafe'), ('name', '~Mc.*lds')]")
         if isinstance(tags, str):
             tag_str = tags
         else:
@@ -435,8 +438,13 @@ class OsmConflator:
                             for i in range(len(coord)):
                                 coord[i] += ways[m.get('ref')][i]
                     coord = [coord[0] / count, coord[1] / count]
-                members = [(m.get('type'), m.get('ref'), m.get('role')) for m in el.findall('member')]
-            pt = OSMPoint(el.tag, int(el.get('id')), int(el.get('version')), coord[0], coord[1], tags)
+                members = [
+                    (m.get('type'), m.get('ref'), m.get('role'))
+                    for m in el.findall('member')
+                ]
+            pt = OSMPoint(
+                el.tag, int(el.get('id')), int(el.get('version')),
+                coord[0], coord[1], tags)
             pt.members = members
             if pt.is_poi():
                 if callable(weight_fn):
@@ -448,12 +456,14 @@ class OsmConflator:
     def register_match(self, dataset_key, osmdata_key, keep=False, retag=None):
         """Registers a match between an OSM point and a dataset point.
 
-        Merges tags from an OSM Point and a dataset point, and add the result to the self.matched list.
+        Merges tags from an OSM Point and a dataset point, and add the result to the
+        self.matched list.
         If dataset_key is None, deletes or retags the OSM point.
         If osmdata_key is None, adds a new OSM point for the dataset point.
         """
         def update_tags(tags, source, master_tags=None):
-            """Updates tags dictionary with tags from source, returns True is something was changed."""
+            """Updates tags dictionary with tags from source,
+            returns True is something was changed."""
             changed = False
             if source:
                 for k, v in source.items():
@@ -517,7 +527,8 @@ class OsmConflator:
                 p = OSMPoint('node', -1-len(self.matched), 1, sp.lat, sp.lon, sp.tags)
                 p.action = 'create'
             else:
-                master_tags = set(self.profile.get('master_tags', required='a set of authoritative tags that replace OSM values'))
+                master_tags = set(self.profile.get(
+                    'master_tags', required='a set of authoritative tags that replace OSM values'))
                 if update_tags(p.tags, sp.tags, master_tags):
                     p.action = 'modify'
                 # Move a node if it is too far from the dataset point
@@ -631,7 +642,9 @@ class OsmConflator:
                     else:
                         count_deleted += 1
                     self.register_match(None, k, keep=not delete_unmatched, retag=retag)
-            logging.info('Deleted %s and retagged %s unmatched objects from OSM', count_deleted, count_retagged)
+            logging.info(
+                'Deleted %s and retagged %s unmatched objects from OSM',
+                count_deleted, count_retagged)
 
     def backup_osm(self):
         """Writes OSM data as-is."""
@@ -641,7 +654,8 @@ class OsmConflator:
             if osmel.osm_type != 'node':
                 etree.SubElement(el, 'center', lat=str(osmel.lat), lon=str(osmel.lon))
             osm.append(el)
-        return "<?xml version='1.0' encoding='utf-8'?>\n" + etree.tostring(osm, encoding='utf-8').decode('utf-8')
+        return ("<?xml version='1.0' encoding='utf-8'?>\n" +
+                etree.tostring(osm, encoding='utf-8').decode('utf-8'))
 
     def to_osc(self, josm=False):
         """Returns a string with osmChange or JOSM XML."""
@@ -668,7 +682,8 @@ class OsmConflator:
                     osc.append(el)
                 else:
                     etree.SubElement(osc, osmel.action).append(el)
-        return "<?xml version='1.0' encoding='utf-8'?>\n" + etree.tostring(osc, encoding='utf-8').decode('utf-8')
+        return ("<?xml version='1.0' encoding='utf-8'?>\n" +
+                etree.tostring(osc, encoding='utf-8').decode('utf-8'))
 
 
 def read_dataset(profile, fileobj):
@@ -678,7 +693,8 @@ def read_dataset(profile, fileobj):
     if not fileobj:
         url = profile.get('download_url')
         if url is None:
-            logging.error('No download_url specified in the profile, please provide a dataset file with --source')
+            logging.error('No download_url specified in the profile, '
+                          'please provide a dataset file with --source')
             return None
         r = requests.get(url)
         if r.status_code != 200:
@@ -698,7 +714,9 @@ def read_dataset(profile, fileobj):
             return data
         except Exception:
             logging.error('Failed to parse the source as a JSON')
-    return profile.get('dataset', args=(fileobj,), required='returns a list of SourcePoints with the dataset')
+    return profile.get(
+        'dataset', args=(fileobj,),
+        required='returns a list of SourcePoints with the dataset')
 
 
 def transform_dataset(profile, dataset):
@@ -771,10 +789,10 @@ def transform_dataset(profile, dataset):
 
 
 def run(profile=None):
-    parser = argparse.ArgumentParser(description='''
-                                     {}.
-                                     Reads a profile with source data and conflates it with OpenStreetMap data.
-                                     Produces an JOSM XML file ready to be uploaded.'''.format(TITLE))
+    parser = argparse.ArgumentParser(
+        description='''{}.
+        Reads a profile with source data and conflates it with OpenStreetMap data.
+        Produces an JOSM XML file ready to be uploaded.'''.format(TITLE))
     if not profile:
         parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
@@ -782,15 +800,16 @@ def run(profile=None):
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
     parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
-    parser.add_argument('--verbose', '-v', action='count', help='Display info messages, use -vv for debugging')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Display debug messages')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Do not display informational messages')
     options = parser.parse_args()
 
-    if options.verbose == 2:
+    if options.verbose:
         log_level = logging.DEBUG
-    elif options.verbose == 1:
-        log_level = logging.INFO
-    else:
+    elif options.quiet:
         log_level = logging.WARNING
+    else:
+        log_level = logging.INFO
     logging.basicConfig(level=log_level, format='%(asctime)s %(message)s', datefmt='%H:%M:%S')
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
