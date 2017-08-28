@@ -8,10 +8,13 @@ import requests
 import os
 import sys
 from io import BytesIO
-from .version import __version__
 import json    # for profiles
 import re      # for profiles
 import zipfile # for profiles
+try:
+    from .version import __version__
+except ImportError:
+    from version import __version__
 try:
     from lxml import etree
 except ImportError:
@@ -26,11 +29,13 @@ MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
 class SourcePoint:
     """A common class for points. Has an id, latitude and longitude,
     and a dict of tags."""
-    def __init__(self, pid, lat, lon, tags=None):
+    def __init__(self, pid, lat, lon, tags=None, category=None):
         self.id = str(pid)
         self.lat = lat
         self.lon = lon
-        self.tags = {} if tags is None else {k.lower(): str(v) for k, v in tags.items()}
+        self.tags = {} if tags is None else {
+            k.lower(): str(v) for k, v in tags.items() if v is not None}
+        self.category = category
         self.dist_offset = 0
 
     def distance(self, other):
@@ -467,7 +472,7 @@ class OsmConflator:
             changed = False
             if source:
                 for k, v in source.items():
-                    if k not in tags or (p.tags[k] != v and (not master_tags or k in master_tags)):
+                    if k not in tags or (p.tags[k] != v and (master_tags and k in master_tags)):
                         if v is not None and len(v) > 0:
                             p.tags[k] = v
                             changed = True
@@ -527,8 +532,7 @@ class OsmConflator:
                 p = OSMPoint('node', -1-len(self.matched), 1, sp.lat, sp.lon, sp.tags)
                 p.action = 'create'
             else:
-                master_tags = set(self.profile.get(
-                    'master_tags', required='a set of authoritative tags that replace OSM values'))
+                master_tags = set(self.profile.get('master_tags', []))
                 if update_tags(p.tags, sp.tags, master_tags):
                     p.action = 'modify'
                 # Move a node if it is too far from the dataset point
@@ -570,6 +574,11 @@ class OsmConflator:
             nearest = kd.search_knn(point, 10)
             if not nearest:
                 return None, None
+            match_func = self.profile.get_raw('matches')
+            if match_func:
+                nearest = [p for p in nearest if match_func(p[0].data.tags, point.tags)]
+                if not nearest:
+                    return None, None
             nearest = [(n[0], n[0].data.distance(point)) for n in nearest]
             return sorted(nearest, key=lambda kv: kv[1])[0]
 
@@ -578,11 +587,36 @@ class OsmConflator:
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
         osm_kd = kdtree.create(list(self.osmdata.values()))
         count_matched = 0
+
+        # Process overridden features first
+        for override, osm_find in self.profile.get('override', {}).items():
+            override = str(override)
+            if override not in self.dataset:
+                continue
+            found = None
+            if len(osm_find) > 2 and osm_find[0] in 'nwr' and osm_find[1].isdigit():
+                if osm_find in self.osmdata:
+                    found = self.osmdata[osm_find]
+            # Search nearest 100 points
+            nearest = osm_kd.search_knn(self.dataset[override], 100)
+            if nearest:
+                for p in nearest:
+                    if 'name' in p[0].data.tags and p[0].data.tags['name'] == osm_find:
+                        found = p[0].data
+            if found:
+                count_matched += 1
+                self.register_match(override, found.id)
+                osm_kd = osm_kd.remove(found)
+
+        # Prepare distance list: match OSM points to each of the dataset points
         dist = []
         for sp, v in self.dataset.items():
             osm_point, distance = search_nn_fix(osm_kd, v)
             if osm_point is not None and distance <= max_distance:
                 dist.append((distance, sp, osm_point.data))
+
+        # The main matching loop: sort dist list if needed,
+        # register the closes match, update the list
         needs_sorting = True
         while dist:
             if needs_sorting:
