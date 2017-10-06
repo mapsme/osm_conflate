@@ -348,7 +348,7 @@ class OsmConflator:
             return qualifies
 
         query = self.profile.get('query', None)
-        if query is not None:
+        if query is not None and not isinstance(query, str):
             for tag in query:
                 if len(tag) >= 1:
                     if tag[0] not in tags:
@@ -447,6 +447,8 @@ class OsmConflator:
                     (m.get('type'), m.get('ref'), m.get('role'))
                     for m in el.findall('member')
                 ]
+            else:
+                continue
             pt = OSMPoint(
                 el.tag, int(el.get('id')), int(el.get('version')),
                 coord[0], coord[1], tags)
@@ -466,17 +468,18 @@ class OsmConflator:
         If dataset_key is None, deletes or retags the OSM point.
         If osmdata_key is None, adds a new OSM point for the dataset point.
         """
-        def update_tags(tags, source, master_tags=None):
+        def update_tags(tags, source, master_tags=None, retagging=False):
             """Updates tags dictionary with tags from source,
             returns True is something was changed."""
             changed = False
             if source:
                 for k, v in source.items():
-                    if k not in tags or (p.tags[k] != v and (master_tags and k in master_tags)):
+                    if k not in tags or retagging or (
+                            p.tags[k] != v and (master_tags and k in master_tags)):
                         if v is not None and len(v) > 0:
                             p.tags[k] = v
                             changed = True
-                        elif k in p.tags:
+                        elif k in p.tags and (v == '' or retagging):
                             del p.tags[k]
                             changed = True
             return changed
@@ -549,7 +552,7 @@ class OsmConflator:
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
         elif keep or p.is_area():
-            if update_tags(p.tags, retag):
+            if update_tags(p.tags, retag, retagging=True):
                 p.action = 'modify'
         else:
             p.action = 'delete'
