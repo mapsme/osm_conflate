@@ -11,6 +11,7 @@ from io import BytesIO
 import json    # for profiles
 import re      # for profiles
 import zipfile # for profiles
+from collections import defaultdict # for profiles
 try:
     from .version import __version__
 except ImportError:
@@ -22,6 +23,7 @@ except ImportError:
 
 TITLE = 'OSM Conflator ' + __version__
 OVERPASS_SERVER = 'http://overpass-api.de/api/'
+OSM_API_SERVER = 'https://api.openstreetmap.org/api/0.6/'
 BBOX_PADDING = 0.003  # in degrees, ~330 m default
 MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
 
@@ -485,24 +487,36 @@ class OsmConflator:
             return changed
 
         def format_change(before, after, ref):
+            MARKER_COLORS = {
+                'delete': '#ee2211',  # deleting feature from OSM
+                'create': '#1100dd',  # creating a new node
+                'update': '#0000ee',  # changing tags on an existing feature
+                'retag':  '#660000',  # cannot delete unmatched feature, changing tags
+                'move':   '#000066',  # moving an existing node
+            }
+            marker_action = None
             geometry = {'type': 'Point', 'coordinates': [after.lon, after.lat]}
-            props = {'osm_type': after.osm_type, 'osm_id': after.osm_id, 'action': after.action}
+            props = {
+                'osm_type': after.osm_type,
+                'osm_id': after.osm_id,
+                'osm_version': after.version,
+                'action': after.action
+            }
             if after.action in ('create', 'delete'):
                 # Red if deleted, green if added
-                props['marker-color'] = '#ff0000' if after.action == 'delete' else '#00dd00'
+                marker_action = after.action
                 for k, v in after.tags.items():
                     props['tags.{}'.format(k)] = v
             else:  # modified
                 # Blue if updated from dataset, dark red if retagged, dark blue if moved
-                props['marker-color'] = '#0000ee' if ref else '#660000'
+                marker_action = 'update' if ref else 'retag'
                 if ref:
-                    props['ref_distance'] = round(10 * ref.distance(after)) / 10.0
+                    props['ref_distance'] = round(10 * ref.distance(before)) / 10.0
                     props['ref_coords'] = [ref.lon, ref.lat]
                     if before.lon != after.lon or before.lat != after.lat:
                         # The object was moved
                         props['were_coords'] = [before.lon, before.lat]
-                        props['ref_distance'] = round(10 * ref.distance(before)) / 10.0
-                        props['marker-color'] = '#000066'
+                        marker_action = 'move'
                     # Find tags that were superseeded by OSM tags
                     unused_tags = {}
                     for k, v in ref.tags.items():
@@ -523,6 +537,9 @@ class OsmConflator:
                         props['tags_deleted.{}'.format(k)] = v0
                     else:
                         props['tags_changed.{}'.format(k)] = '{} -> {}'.format(v0, v1)
+                if after.osm_type in ('way', 'relation'):
+                    props['nodes' if after.osm_type == 'way' else 'members'] = after.members
+            props['marker-color'] = MARKER_COLORS[marker_action]
             return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
@@ -723,6 +740,19 @@ class OsmConflator:
                 etree.tostring(osc, encoding='utf-8').decode('utf-8'))
 
 
+def check_moveability(changes):
+    to_check = [x for x in changes if x['properties']['osm_type'] == 'node' and
+                x['properties']['action'] == 'modify']
+    logging.info('Checking moveability of %s modified nodes', len(to_check))
+    for c in to_check:
+        p = c['properties']
+        p['can_move'] = False
+        r = requests.get('{}node/{}/ways'.format(OSM_API_SERVER, p['osm_id']))
+        if r.status_code == 200:
+            xml = etree.fromstring(r.content)
+            p['can_move'] = xml.find('way') is None
+
+
 def read_dataset(profile, fileobj):
     """A helper function to call a "dataset" function in the profile.
     If the fileobj is not specified, tries to download a dataset from
@@ -837,6 +867,7 @@ def run(profile=None):
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
     parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
+    parser.add_argument('-m', '--check-move', action='store_true', help='Check for moveability of modified modes')
     parser.add_argument('--verbose', '-v', action='store_true', help='Display debug messages')
     parser.add_argument('--quiet', '-q', action='store_true', help='Do not display informational messages')
     options = parser.parse_args()
@@ -878,6 +909,8 @@ def run(profile=None):
     diff = conflator.to_osc(not options.osc)
     options.output.write(diff)
     if options.changes:
+        if options.check_move:
+            check_moveability(conflator.changes)
         fc = {'type': 'FeatureCollection', 'features': conflator.changes}
         json.dump(fc, options.changes, ensure_ascii=False, sort_keys=True, indent=1)
 
