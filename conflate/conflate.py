@@ -185,8 +185,9 @@ class OsmConflator:
     "download_osm" or "parse_osm" methods. Then it is ready to match:
     call the "match" method and get results with "to_osc".
     """
-    def __init__(self, profile, dataset):
+    def __init__(self, profile, dataset, audit=None):
         self.dataset = {p.id: p for p in dataset}
+        self.audit = audit or {}
         self.osmdata = {}
         self.matched = []
         self.changes = []
@@ -470,19 +471,34 @@ class OsmConflator:
         If dataset_key is None, deletes or retags the OSM point.
         If osmdata_key is None, adds a new OSM point for the dataset point.
         """
-        def update_tags(tags, source, master_tags=None, retagging=False):
+        def update_tags(tags, source, master_tags=None, retagging=False, audit=None):
             """Updates tags dictionary with tags from source,
             returns True is something was changed."""
+            keep = set()
+            override = set()
             changed = False
             if source:
+                if audit:
+                    keep = set(audit.get('keep', []))
+                    override = set(audit.get('override', []))
                 for k, v in source.items():
+                    if k in keep:
+                        continue
+                    if k in override:
+                        if not v and k in tags:
+                            del tags[k]
+                            changed = True
+                        elif v and tags.get(k, None) != v:
+                            tags[k] = v
+                            changed = True
+                        continue
                     if k not in tags or retagging or (
-                            p.tags[k] != v and (master_tags and k in master_tags)):
+                            tags[k] != v and (master_tags and k in master_tags)):
                         if v is not None and len(v) > 0:
-                            p.tags[k] = v
+                            tags[k] = v
                             changed = True
                         elif k in p.tags and (v == '' or retagging):
-                            del p.tags[k]
+                            del tags[k]
                             changed = True
             return changed
 
@@ -499,7 +515,6 @@ class OsmConflator:
             props = {
                 'osm_type': after.osm_type,
                 'osm_id': after.osm_id,
-                'osm_version': after.version,
                 'action': after.action
             }
             if after.action in ('create', 'delete'):
@@ -507,10 +522,13 @@ class OsmConflator:
                 marker_action = after.action
                 for k, v in after.tags.items():
                     props['tags.{}'.format(k)] = v
+                if ref:
+                    props['ref_id'] = ref.id
             else:  # modified
                 # Blue if updated from dataset, dark red if retagged, dark blue if moved
                 marker_action = 'update' if ref else 'retag'
                 if ref:
+                    props['ref_id'] = ref.id
                     props['ref_distance'] = round(10 * ref.distance(before)) / 10.0
                     props['ref_coords'] = [ref.lon, ref.lat]
                     if before.lon != after.lon or before.lat != after.lat:
@@ -537,8 +555,6 @@ class OsmConflator:
                         props['tags_deleted.{}'.format(k)] = v0
                     else:
                         props['tags_changed.{}'.format(k)] = '{} -> {}'.format(v0, v1)
-                if after.osm_type in ('way', 'relation'):
-                    props['nodes' if after.osm_type == 'way' else 'members'] = after.members
             props['marker-color'] = MARKER_COLORS[marker_action]
             return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
@@ -546,6 +562,9 @@ class OsmConflator:
         p = self.osmdata.pop(osmdata_key, None)
         p0 = None if p is None else p.copy()
         sp = self.dataset.pop(dataset_key, None)
+        audit = self.audit.get(sp.id if sp else '{}{}'.format(p.osm_type, p.osm_id), {})
+        if audit.get('skip', False):
+            return
 
         if sp is not None:
             if p is None:
@@ -553,7 +572,7 @@ class OsmConflator:
                 p.action = 'create'
             else:
                 master_tags = set(self.profile.get('master_tags', []))
-                if update_tags(p.tags, sp.tags, master_tags):
+                if update_tags(p.tags, sp.tags, master_tags, audit=audit):
                     p.action = 'modify'
                 # Move a node if it is too far from the dataset point
                 if not p.is_area() and sp.distance(p) > max_distance:
@@ -568,8 +587,22 @@ class OsmConflator:
                     p.tags['source'] = self.source
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
+            if 'fixme' in audit and audit['fixme']:
+                p.tags['fixme'] = audit['fixme']
+            if 'move' in audit and not p.is_area():
+                if p0 and audit['move'] == 'osm':
+                    p.lat = p0.lat
+                    p.lon = p0.lon
+                elif audit['move'] == 'dataset':
+                    p.lat = sp.lat
+                    p.lon = sp.lon
+                elif len(audit['move']) == 2:
+                    p.lat = audit['move'][1]
+                    p.lon = audit['move'][0]
+                if p.action is None:
+                    p.action = 'modify'
         elif keep or p.is_area():
-            if update_tags(p.tags, retag, retagging=True):
+            if update_tags(p.tags, retag, retagging=True, audit=audit):
                 p.action = 'modify'
         else:
             p.action = 'delete'
@@ -863,6 +896,7 @@ def run(profile=None):
     if not profile:
         parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
+    parser.add_argument('-a', '--audit', type=argparse.FileType('rb'), help='Conflation validation result as a JSON file')
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout, help='Output OSM XML file name')
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
     parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
@@ -893,7 +927,12 @@ def run(profile=None):
     transform_dataset(profile, dataset)
     logging.info('Read %s items from the dataset', len(dataset))
 
-    conflator = OsmConflator(profile, dataset)
+    audit = None
+    if options.audit:
+        reader = codecs.getreader('utf-8')
+        audit = json.load(reader(options.audit))
+
+    conflator = OsmConflator(profile, dataset, audit)
     if options.osm and os.path.exists(options.osm):
         with open(options.osm, 'r') as f:
             conflator.parse_osm(f)
