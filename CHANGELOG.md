@@ -2,6 +2,13 @@
 
 ## master branch
 
+## 1.2.0
+
+_Released 2017-11-23_
+
+* Checking moveability for json output (`-m`) for cf_audit.
+* Support for cf_audit json (`-a`).
+
 ## 1.1.0
 
 _Released 2017-10-06_
