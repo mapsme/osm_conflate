@@ -505,10 +505,10 @@ class OsmConflator:
         def format_change(before, after, ref):
             MARKER_COLORS = {
                 'delete': '#ee2211',  # deleting feature from OSM
-                'create': '#1100dd',  # creating a new node
+                'create': '#11dd11',  # creating a new node
                 'update': '#0000ee',  # changing tags on an existing feature
                 'retag':  '#660000',  # cannot delete unmatched feature, changing tags
-                'move':   '#000066',  # moving an existing node
+                'move':   '#110055',  # moving an existing node
             }
             marker_action = None
             geometry = {'type': 'Point', 'coordinates': [after.lon, after.lat]}
@@ -703,6 +703,19 @@ class OsmConflator:
                         count_ref += 1
                         self.register_match(p.tags[self.ref], k)
             logging.info('Updated %s OSM objects with %s tag', count_ref, self.ref)
+
+        # Add points for which audit specifically mentioned creating
+        count_created = 0
+        for ref, a in self.audit.items():
+            if ref in self.dataset:
+                if a.get('create', None):
+                    count_created += 1
+                    self.register_match(ref, None)
+                elif a.get('skip', None):
+                    # If we skip an object here, it would affect the conflation order
+                    pass
+        if count_created > 0:
+            logging.info('Created %s audit-overridden dataset points', count_created)
 
         # Then find matches for unmatched dataset points
         self.match_dataset_points_smart()
