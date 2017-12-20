@@ -1,7 +1,14 @@
+# This profile reads a prepared JSON, thus no "dataset" function
+
+# Value for the changeset "source" tag
 source = 'Navads'
+# Keeping identifiers in a "ref:navads_shell" tag
 dataset_id = 'navads_shell'
+# Overpass API query is a simple [amenity="fuel"]
 query = [('amenity', 'fuel')]
+# These tag values override values on OSM objects
 master_tags = ('brand', 'addr:postcode', 'phone', 'opening_hours')
+# Looking at most 50 meters around a dataset point
 max_distance = 50
 
 
@@ -16,10 +23,15 @@ def format_phone(ph):
     return ph
 
 
+# Tag transformation
 transform = {
+    # Just add this tag
     'amenity': 'fuel',
+    # Rename key
     'postal_code': '>addr:postcode',
+    # Use a function to transform a value
     'phone': format_phone,
+    # Remove this tag
     'name': '-'
 }
 

@@ -4,6 +4,7 @@ import requests
 import codecs
 
 
+# Reading the dataset passport to determine an URL of the latest dataset version
 def download_url(dataset_id='7705851331-museums'):
     r = requests.get('http://opendata.mkrf.ru/opendata/{}/meta.json'.format(dataset_id))
     if r.status_code != 200 or len(r.content) == 0:
@@ -24,6 +25,7 @@ master_tags = ('official_name', 'phone', 'opening_hours', 'website')
 
 def dataset(fileobj):
     def make_wd_ranges(r):
+        """Converts e.g. [0,1,4] into 'Mo-Tu, Fr'."""
         wd = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
         res = wd[r[0]]
         in_range = False
@@ -39,6 +41,8 @@ def dataset(fileobj):
         return res
 
     def parse_hours(h):
+        """Receives a dict {'0': {'from': '10:00:00', 'to': '18:00:00'}, ...}
+        and returns a proper opening_hours value."""
         days = {}
         for wd, d in h.items():
             if not d['from']:
