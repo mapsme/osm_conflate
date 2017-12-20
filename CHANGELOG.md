@@ -2,6 +2,10 @@
 
 ## master branch
 
+## 1.2.1
+
+_Released 2017-12-20_
+
 * Support force creating points with `audit['create']`.
 * Fix green colour for created points in JSON.
 * Make `--output` optional and remove the default.
