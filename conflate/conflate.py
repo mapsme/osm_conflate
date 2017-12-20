@@ -909,8 +909,8 @@ def run(profile=None):
     if not profile:
         parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
-    parser.add_argument('-a', '--audit', type=argparse.FileType('rb'), help='Conflation validation result as a JSON file')
-    parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout, help='Output OSM XML file name')
+    parser.add_argument('-a', '--audit', type=argparse.FileType('r'), help='Conflation validation result as a JSON file')
+    parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='Output OSM XML file name')
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
     parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
@@ -918,6 +918,10 @@ def run(profile=None):
     parser.add_argument('--verbose', '-v', action='store_true', help='Display debug messages')
     parser.add_argument('--quiet', '-q', action='store_true', help='Do not display informational messages')
     options = parser.parse_args()
+
+    if not options.output and not options.changes:
+        parser.print_help()
+        return
 
     if options.verbose:
         log_level = logging.DEBUG
@@ -942,8 +946,7 @@ def run(profile=None):
 
     audit = None
     if options.audit:
-        reader = codecs.getreader('utf-8')
-        audit = json.load(reader(options.audit))
+        audit = json.load(options.audit)
 
     conflator = OsmConflator(profile, dataset, audit)
     if options.osm and os.path.exists(options.osm):
@@ -958,8 +961,10 @@ def run(profile=None):
 
     conflator.match()
 
-    diff = conflator.to_osc(not options.osc)
-    options.output.write(diff)
+    if options.output:
+        diff = conflator.to_osc(not options.osc)
+        options.output.write(diff)
+
     if options.changes:
         if options.check_move:
             check_moveability(conflator.changes)
