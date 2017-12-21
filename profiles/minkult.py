@@ -72,6 +72,11 @@ def dataset(fileobj):
             return coord - absmax * 2
         return coord
 
+    def format_phone(ph):
+        if ph and len(ph) == 11 and ph[0] == '7':
+            return '+7 {} {}-{}-{}'.format(ph[1:4], ph[4:7], ph[7:9], ph[9:])
+        return ph
+
     source = json.load(codecs.getreader('utf-8')(fileobj))
     data = []
     for el in source:
@@ -87,6 +92,8 @@ def dataset(fileobj):
             'operator': d['organization']['name'],
             'addr:full': '{}, {}'.format(d['locale']['name'], d['address']['street']),
         }
+        if tags['operator'] == tags['name']:
+            del tags['operator']
         if d.get('workingSchedule'):
             tags['opening_hours'] = parse_hours(d['workingSchedule'])
         if 'email' in d['contacts']:
@@ -96,6 +103,6 @@ def dataset(fileobj):
             if tags['website'].endswith('.ru'):
                 tags['website'] += '/'
         if 'phones' in d['contacts'] and d['contacts']['phones']:
-            tags['phone'] = '+' + d['contacts']['phones'][0]['value']
+            tags['phone'] = format_phone(d['contacts']['phones'][0]['value'])
         data.append(SourcePoint(gid, lat, lon, tags))
     return data

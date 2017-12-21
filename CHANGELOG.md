@@ -2,6 +2,8 @@
 
 ## master branch
 
+* Addr:full tag is not set when addr:housenumber is present.
+
 ## 1.2.1
 
 _Released 2017-12-20_

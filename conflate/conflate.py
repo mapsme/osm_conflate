@@ -495,6 +495,9 @@ class OsmConflator:
                     if k not in tags or retagging or (
                             tags[k] != v and (master_tags and k in master_tags)):
                         if v is not None and len(v) > 0:
+                            # Not setting addr:full when the object has addr:housenumber
+                            if k == 'addr:full' and 'addr:housenumber' in tags:
+                                continue
                             tags[k] = v
                             changed = True
                         elif k in p.tags and (v == '' or retagging):
