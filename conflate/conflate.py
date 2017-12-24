@@ -141,6 +141,7 @@ class Profile:
     is required, you will be notified of that.
     """
     def __init__(self, fileobj):
+        self.param = None
         if isinstance(fileobj, dict):
             self.profile = fileobj
         elif hasattr(fileobj, 'read'):
@@ -914,6 +915,7 @@ def run(profile=None):
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
     parser.add_argument('-a', '--audit', type=argparse.FileType('r'), help='Conflation validation result as a JSON file')
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='Output OSM XML file name')
+    parser.add_argument('-p', '--param', help='Optional parameter for the profile')
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
     parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
@@ -939,6 +941,7 @@ def run(profile=None):
     if not profile:
         logging.debug('Loading profile %s', options.profile)
     profile = Profile(profile or options.profile)
+    profile.param = options.param
 
     dataset = read_dataset(profile, options.source)
     if not dataset:
