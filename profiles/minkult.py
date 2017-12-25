@@ -3,9 +3,15 @@ import logging
 import requests
 import codecs
 
+source = 'opendata.mkrf.ru'
+dataset_id = 'mkrf_theaters'
+query = [('amenity', 'theatre')]
+max_distance = 300
+master_tags = ('official_name', 'phone', 'opening_hours', 'website')
+
 
 # Reading the dataset passport to determine an URL of the latest dataset version
-def download_url(dataset_id='7705851331-museums'):
+def download_url(dataset_id='7705851331-theaters'):
     r = requests.get('http://opendata.mkrf.ru/opendata/{}/meta.json'.format(dataset_id))
     if r.status_code != 200 or len(r.content) == 0:
         logging.error('Could not get URL for dataset: %s %s', r.status_code, r.text)
@@ -15,12 +21,6 @@ def download_url(dataset_id='7705851331-museums'):
     latest = result['data'][-1]
     logging.info('Downloading %s from %s', result['title'], latest['created'])
     return latest['source']
-
-source = 'opendata.mkrf.ru'
-dataset_id = 'mkrf_museums'
-query = [('tourism', 'museum')]
-max_distance = 300
-master_tags = ('official_name', 'phone', 'opening_hours', 'website')
 
 
 def dataset(fileobj):
@@ -85,10 +85,10 @@ def dataset(fileobj):
         lon = wrap(d['address']['mapPosition']['coordinates'][1], 180)
         lat = d['address']['mapPosition']['coordinates'][0]
         tags = {
-            'tourism': 'museum',
+            'amenity': 'theatre',
             'name': d['name'],
-            'official_name': d['name'],
-            'image': d['image']['url'],
+            # 'official_name': d['name'],
+            # 'image': d['image']['url'],
             'operator': d['organization']['name'],
             'addr:full': '{}, {}'.format(d['locale']['name'], d['address']['street']),
         }

@@ -36,7 +36,7 @@ class SourcePoint:
         self.lat = lat
         self.lon = lon
         self.tags = {} if tags is None else {
-            k.lower(): str(v) for k, v in tags.items() if v is not None}
+            k.lower(): str(v).strip() for k, v in tags.items() if v is not None}
         self.category = category
         self.dist_offset = 0
 
