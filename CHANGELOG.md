@@ -3,6 +3,7 @@
 ## master branch
 
 * Addr:full tag is not set when addr:housenumber is present.
+* Whitespace is stripped from tag values in a dataset.
 
 ## 1.2.1
 
