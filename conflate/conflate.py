@@ -26,6 +26,7 @@ OVERPASS_SERVER = 'http://overpass-api.de/api/'
 OSM_API_SERVER = 'https://api.openstreetmap.org/api/0.6/'
 BBOX_PADDING = 0.003  # in degrees, ~330 m default
 MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
+CONTACT_KEYS = set(('phone', 'website', 'email', 'fax', 'facebook', 'twitter', 'instagram'))
 
 
 class SourcePoint:
@@ -482,26 +483,35 @@ class OsmConflator:
                     keep = set(audit.get('keep', []))
                     override = set(audit.get('override', []))
                 for k, v in source.items():
+                    # Conflating contact: namespace
+                    if k in CONTACT_KEYS and k not in tags and 'contact:'+k in tags:
+                        osm_key = 'contact:'+k
+                    elif k.startswith('contact:') and k not in tags and k[8:] in tags:
+                        osm_key = k[8:]
+                    else:
+                        osm_key = k
+
                     if k in keep:
                         continue
                     if k in override:
-                        if not v and k in tags:
-                            del tags[k]
+                        if not v and osm_key in tags:
+                            del tags[osm_key]
                             changed = True
-                        elif v and tags.get(k, None) != v:
-                            tags[k] = v
+                        elif v and tags.get(osm_key, None) != v:
+                            tags[osm_key] = v
                             changed = True
                         continue
-                    if k not in tags or retagging or (
-                            tags[k] != v and (master_tags and k in master_tags)):
+
+                    if osm_key not in tags or retagging or (
+                            tags[osm_key] != v and (master_tags and k in master_tags)):
                         if v is not None and len(v) > 0:
                             # Not setting addr:full when the object has addr:housenumber
                             if k == 'addr:full' and 'addr:housenumber' in tags:
                                 continue
-                            tags[k] = v
+                            tags[osm_key] = v
                             changed = True
-                        elif k in p.tags and (v == '' or retagging):
-                            del tags[k]
+                        elif osm_key in p.tags and (v == '' or retagging):
+                            del tags[osm_key]
                             changed = True
             return changed
 
