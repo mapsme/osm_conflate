@@ -472,6 +472,14 @@ class OsmConflator:
         If dataset_key is None, deletes or retags the OSM point.
         If osmdata_key is None, adds a new OSM point for the dataset point.
         """
+        def get_osm_key(k, osm_tags):
+            """Conflating contact: namespace."""
+            if k in CONTACT_KEYS and k not in osm_tags and 'contact:'+k in osm_tags:
+                return 'contact:'+k
+            elif k.startswith('contact:') and k not in osm_tags and k[8:] in osm_tags:
+                return k[8:]
+            return k
+
         def update_tags(tags, source, master_tags=None, retagging=False, audit=None):
             """Updates tags dictionary with tags from source,
             returns True is something was changed."""
@@ -483,13 +491,7 @@ class OsmConflator:
                     keep = set(audit.get('keep', []))
                     override = set(audit.get('override', []))
                 for k, v in source.items():
-                    # Conflating contact: namespace
-                    if k in CONTACT_KEYS and k not in tags and 'contact:'+k in tags:
-                        osm_key = 'contact:'+k
-                    elif k.startswith('contact:') and k not in tags and k[8:] in tags:
-                        osm_key = k[8:]
-                    else:
-                        osm_key = k
+                    osm_key = get_osm_key(k, tags)
 
                     if k in keep:
                         continue
@@ -549,12 +551,9 @@ class OsmConflator:
                         props['were_coords'] = [before.lon, before.lat]
                         marker_action = 'move'
                     # Find tags that were superseeded by OSM tags
-                    unused_tags = {}
                     for k, v in ref.tags.items():
-                        if k not in after.tags or after.tags[k] != v:
-                            unused_tags[k] = v
-                    if unused_tags:
-                        for k, v in unused_tags.items():
+                        osm_key = get_osm_key(k, after.tags)
+                        if osm_key not in after.tags or after.tags[osm_key] != v:
                             props['ref_unused_tags.{}'.format(k)] = v
                 # Now compare old and new OSM tags
                 for k in set(after.tags.keys()).union(set(before.tags.keys())):
