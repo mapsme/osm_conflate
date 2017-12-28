@@ -2,6 +2,12 @@
 
 ## master branch
 
+* Fix error in applying audit json after conflating `contact:` namespace.
+
+## 1.2.2
+
+_Released 2017-12-27_
+
 * Addr:full tag is not set when addr:housenumber is present.
 * Whitespace is stripped from tag values in a dataset.
 * Conflate `contact:` namespace.
