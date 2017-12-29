@@ -493,9 +493,9 @@ class OsmConflator:
                 for k, v in source.items():
                     osm_key = get_osm_key(k, tags)
 
-                    if osm_key in keep:
+                    if k in keep or osm_key in keep:
                         continue
-                    if osm_key in override:
+                    if k in override or osm_key in override:
                         if not v and osm_key in tags:
                             del tags[osm_key]
                             changed = True

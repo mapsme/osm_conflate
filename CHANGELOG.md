@@ -2,6 +2,10 @@
 
 ## master branch
 
+## 1.2.3
+
+_Released 2017-12-29_
+
 * Fix error in applying audit json after conflating `contact:` namespace.
 
 ## 1.2.2
