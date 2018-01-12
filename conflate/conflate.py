@@ -913,6 +913,43 @@ def transform_dataset(profile, dataset):
             d.tags[key] = value
 
 
+def write_for_filter(profile, dataset, f):
+    def query_to_tag_strings(query):
+        if isinstance(query, str):
+            raise ValueError('Query string for filter should not be a string')
+        result = []
+        if isinstance(query[0][0], str):
+            query = [query]
+        for q in query:
+            parts = []
+            for part in q:
+                if len(part) == 1:
+                    parts.append(part[0])
+                elif part[1] is None or len(part[1]) == 0:
+                    parts.append('!'+part[0])
+                elif part[1][0] == '~':
+                    raise ValueError('Cannot use regular expressions in filter')
+                elif '|' in part[1] or ';' in part[1]:
+                    raise ValueError('"|" and ";" symbols is not allowed in query values')
+                else:
+                    parts.append('='.join(part))
+            result.append('|'.join(parts))
+        return result
+
+    categories = profile.get('categories', {})
+    if None not in categories:
+        categories[None] = query_to_tag_strings(profile.get('query'))
+    i = 0
+    for name, query in categories.items():
+        for tags in query_to_tag_strings(query):
+            f.write('{},{},{}\n'.format(i, name, tags))
+        cat_map[i] = name
+        i += 1
+    f.write('\n')
+    for d in dataset:
+        f.write('{},{},{}'.format(d.lon, d.lat, cat_map[d.category]))
+
+
 def run(profile=None):
     parser = argparse.ArgumentParser(
         description='''{}.
@@ -927,6 +964,7 @@ def run(profile=None):
     parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
     parser.add_argument('-m', '--check-move', action='store_true', help='Check for moveability of modified modes')
+    parser.add_argument('-f', '--for-filter', type=argparse.FileType('w'), help='Prepare a file for the filtering script')
     parser.add_argument('--verbose', '-v', action='store_true', help='Display debug messages')
     parser.add_argument('--quiet', '-q', action='store_true', help='Do not display informational messages')
     options = parser.parse_args()
@@ -955,6 +993,11 @@ def run(profile=None):
         sys.exit(2)
     transform_dataset(profile, dataset)
     logging.info('Read %s items from the dataset', len(dataset))
+
+    if options.for_filter:
+        write_for_filter(profile, dataset, options.for_filter)
+        logging.info('Prepared data for filtering, exitting')
+        return
 
     audit = None
     if options.audit:
