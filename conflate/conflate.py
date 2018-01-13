@@ -938,16 +938,17 @@ def write_for_filter(profile, dataset, f):
 
     categories = profile.get('categories', {})
     if None not in categories:
-        categories[None] = query_to_tag_strings(profile.get('query'))
+        categories[None] = profile.get('query')
+    cat_map = {}
     i = 0
     for name, query in categories.items():
         for tags in query_to_tag_strings(query):
-            f.write('{},{},{}\n'.format(i, name, tags))
-        cat_map[i] = name
+            f.write('{},{},{}\n'.format(i, name or '', tags))
+        cat_map[name] = i
         i += 1
     f.write('\n')
     for d in dataset:
-        f.write('{},{},{}'.format(d.lon, d.lat, cat_map[d.category]))
+        f.write('{},{},{}\n'.format(d.lon, d.lat, cat_map[d.category]))
 
 
 def run(profile=None):
@@ -969,7 +970,7 @@ def run(profile=None):
     parser.add_argument('--quiet', '-q', action='store_true', help='Do not display informational messages')
     options = parser.parse_args()
 
-    if not options.output and not options.changes:
+    if not options.output and not options.changes and not options.for_filter:
         parser.print_help()
         return
 
