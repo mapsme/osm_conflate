@@ -346,11 +346,12 @@ class OsmConflator:
         padding = self.profile.get('bbox_padding', BBOX_PADDING)
         return [get_bbox(b, padding) for b in boxes]
 
-    def check_against_profile_tags(self, tags):
+    def get_categories(self, tags):
         qualifies = self.profile.get('qualifies', args=tags)
         if qualifies is not None:
             return qualifies
 
+        categories = ['']
         query = self.profile.get('query', None)
         if query is not None and not isinstance(query, str):
             for tag in query:
@@ -360,7 +361,7 @@ class OsmConflator:
                     if len(tag) >= 2 and tag[1][0] != '~':
                         if tag[1] != tags[tag[0]]:
                             return False
-        return True
+        return categories
 
     def download_osm(self):
         """Constructs an Overpass API query and requests objects
@@ -421,7 +422,8 @@ class OsmConflator:
             tags = {}
             for tag in el.findall('tag'):
                 tags[tag.get('k')] = tag.get('v')
-            if not self.check_against_profile_tags(tags):
+            categories = self.get_categories(tags)
+            if categories is False or categories is None or len(categories) == 0:
                 continue
 
             if el.tag == 'node':

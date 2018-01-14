@@ -15,18 +15,20 @@
     Written by Ilya Zverev for MAPS.ME.
 */
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <fstream>
 #include <string>
+#include <map>
 
-#include <osmium/area/assembler.hpp>
-#include <osmium/area/multipolygon_manager.hpp>
 #include <osmium/geom/coordinates.hpp>
 #include <osmium/handler/node_locations_for_ways.hpp>
 #include <osmium/index/map/flex_mem.hpp>
 #include <osmium/io/any_input.hpp>
 #include <osmium/io/xml_output.hpp>
+#include <osmium/relations/relations_manager.hpp>
 #include <osmium/visitor.hpp>
 
 #include "RTree.h"
@@ -35,16 +37,41 @@ using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type,
                                                osmium::Location>;
 using location_handler_type = osmium::handler::NodeLocationsForWays<index_type>;
 
-constexpr double kSearchRadius = 0.01; // ~1 km
+class AmenityRelationsManager : public osmium::relations::RelationsManager<AmenityRelationsManager, false, true, false> {
+public:
+
+  bool new_relation(osmium::Relation const & rel) noexcept {
+    const char *rel_type = rel.tags().get_value_by_key("type");
+    return rel_type && !std::strcmp(rel_type, "multipolygon");
+  }
+
+  void complete_relation(osmium::Relation const & rel) {
+    this->buffer().add_item(rel);
+    this->buffer().commit();
+  }
+};
+
+bool AppendToVector(uint16_t cat_id, void *vec) {
+  static_cast<std::vector<uint16_t>*>(vec)->push_back(cat_id);
+}
 
 class AmenityHandler : public osmium::handler::Handler {
 
+  constexpr static double kSearchRadius = 0.001; // ~1 km TODO! revert to 0.01
+
   typedef RTree<uint16_t, int32_t, 2, double> DatasetTree;
+  typedef std::vector<std::vector<std::string>> TQuery;
+  typedef std::vector<TQuery> TCategory;
+
   DatasetTree m_tree;
+  osmium::io::Writer &m_writer;
+  std::map<uint16_t, std::vector<TQuery>> m_categories;
+  std::map<uint16_t, std::string> m_category_names;
 
   void print_object(const osmium::OSMObject &obj,
                     const osmium::Location &center) {
     // TODO
+    std::cout << obj.type() << ' ' << obj.id() << std::endl;
   }
 
   // Calculate the center point of a NodeRefList.
@@ -63,16 +90,82 @@ class AmenityHandler : public osmium::handler::Handler {
     return osmium::Location{x, y};
   }
 
-  bool eligible(const osmium::Location &coord, osmium::TagList const &tags) {
-    // TODO: find all points in a certain radius around coord
-    // TODO: test tags for each of these points on tags
-    return true; // TODO: change default to false
+  bool TestTags(osmium::TagList const & tags, TQuery const & query) {
+    for (auto const & pair : query) {
+      // TODO
+    }
+    return true;
   }
 
-  osmium::io::Writer &m_writer;
+  bool IsEligible(const osmium::Location & loc, osmium::TagList const & tags) {
+    if (tags.empty())
+      return false;
+
+    int32_t radius = osmium::Location::double_to_fix(kSearchRadius);
+    int32_t min[] = {loc.x() - radius, loc.y() - radius};
+    int32_t max[] = {loc.x() + radius, loc.y() + radius};
+    std::vector<uint16_t> found;
+    if (!m_tree.Search(min, max, &AppendToVector, &found))
+      return false;
+    for (uint16_t cat_id : found)
+      for (TQuery query : m_categories[cat_id])
+        if (TestTags(tags, query))
+          return true;
+    return false;
+  }
+
+  void SplitTrim(std::string const & s, char delimiter, std::size_t limit, std::vector<std::string> & target) {
+    target.clear();
+    std::size_t start = 0, end = 0;
+    while (start < s.length()) {
+      end = s.find(delimiter, start);
+      if (end == std::string::npos || target.size() == limit)
+        end = s.length();
+      while (start < end && std::isspace(s[start]))
+        start++;
+
+      std::size_t tmpend = end - 1;
+      while (tmpend > start && std::isspace(s[tmpend]))
+        tmpend++;
+      target.push_back(s.substr(start, tmpend - start + 1));
+      start = end + 1;
+    }
+  }
+
+  TQuery ParseQuery(std::string const & query) {
+    TQuery q;
+    std::vector<std::string> parts, keys;
+    SplitTrim(query, '|', 100, parts);
+    for (std::string const & part : parts) {
+      SplitTrim(part, '=', 100, keys);
+      // TODO
+    }
+    return q;
+  }
 
   void LoadCategories(const char *filename) {
-    // TODO: read categories list and make an kd-tree of these.
+    std::ifstream infile(filename);
+    std::string line;
+    std::vector<std::string> parts;
+    bool parsingPoints = false;
+    while (std::getline(infile, line)) {
+      if (!parsingPoints) {
+        if (!line.size())
+          parsingPoints = true;
+        else {
+          SplitTrim(line, ',', 3, parts); // cat_id, name, query
+          uint16_t cat_id = std::stoi(parts[0]);
+          m_category_names[cat_id] = parts[1];
+          m_categories[cat_id].push_back(ParseQuery(parts[2]));
+        }
+      } else {
+        SplitTrim(line, ',', 3, parts); // lon, lat, cat_id
+        const osmium::Location loc(std::stod(parts[0]), std::stod(parts[1]));
+        int32_t coords[] = {loc.x(), loc.y()};
+        uint16_t cat_id = std::stoi(parts[2]);
+        m_tree.Insert(coords, coords, cat_id);
+      }
+    }
   }
 
 public:
@@ -81,16 +174,53 @@ public:
     LoadCategories(categories);
   }
 
-  void node(const osmium::Node &node) {
-    if (eligible(node.location(), node.tags())) {
+  void node(osmium::Node const & node) {
+    if (IsEligible(node.location(), node.tags())) {
       print_object(node, node.location());
     }
   }
 
-  void area(const osmium::Area &area) {
-    const auto center = calc_center(*area.cbegin<osmium::OuterRing>());
-    if (eligible(center, area.tags())) {
-      print_object(area, center);
+  void way(osmium::Way const & way) {
+    if (!way.is_closed())
+      return;
+
+    int64_t x = 0, y = 0, cnt = 0;
+    for (const auto& node_ref : way.nodes()) {
+        if (node_ref.location()) {
+            x += node_ref.x();
+            y += node_ref.y();
+            cnt++;
+        }
+    }
+    if (!cnt)
+      return;
+
+    const osmium::Location center(x / cnt, y / cnt);
+    if (IsEligible(center, way.tags())) {
+      print_object(way, center);
+    }
+  }
+
+  void relation(osmium::Relation const & rel) {
+    int64_t x = 0, y = 0, cnt = 0;
+    for (const auto& member : rel.members()) {
+        if (member.full_member() && member.type() == osmium::item_type::way) {
+            const osmium::Way *way = reinterpret_cast<const osmium::Way*>(&member.get_object());
+            for (const auto& node_ref : way->nodes()) {
+                if (false && node_ref.location()) {
+                    x += node_ref.x();
+                    y += node_ref.y();
+                    cnt++;
+                }
+            }
+        }
+    }
+    if (!cnt)
+      return;
+
+    const osmium::Location center(x / cnt, y / cnt);
+    if (IsEligible(center, rel.tags())) {
+      print_object(rel, center);
     }
   }
 
@@ -106,12 +236,9 @@ int main(int argc, char *argv[]) {
   const osmium::io::File input_file{argv[2]};
   const osmium::io::File output_file{argc > 3 ? argv[3] : "", "osm"};
 
-  std::cerr << "Pass 1/2: Assembling multipolygons...\n";
-  osmium::area::Assembler::config_type assembler_config;
-  assembler_config.create_empty_areas = false;
-  osmium::area::MultipolygonManager<osmium::area::Assembler> mp_manager{
-      assembler_config};
-  osmium::relations::read_relations(input_file, mp_manager);
+  std::cerr << "Pass 1/2: Reading relations...\n";
+  AmenityRelationsManager manager;
+  osmium::relations::read_relations(input_file, manager);
 
   osmium::io::Header header;
   header.set("generator", argv[0]);
@@ -125,7 +252,7 @@ int main(int argc, char *argv[]) {
   osmium::io::Reader reader{input_file};
 
   osmium::apply(reader, location_handler, data_handler,
-                mp_manager.handler(
+                manager.handler(
                     [&data_handler](const osmium::memory::Buffer &area_buffer) {
                       osmium::apply(area_buffer, data_handler);
                     }));
