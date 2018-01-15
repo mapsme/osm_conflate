@@ -45,7 +45,7 @@ bool AppendToVector(uint16_t cat_id, void *vec) {
 
 class AmenityHandler : public osmium::handler::Handler {
 
-  constexpr static double kSearchRadius = 0.0001; // ~1 km TODO! revert to 0.01
+  constexpr static double kSearchRadius = 0.01;
 
   typedef RTree<uint16_t, int32_t, 2, double> DatasetTree;
   typedef std::vector<std::vector<std::string>> TQuery;
@@ -78,8 +78,27 @@ class AmenityHandler : public osmium::handler::Handler {
   }
 
   bool TestTags(osmium::TagList const & tags, TQuery const & query) {
-    for (auto const & pair : query) {
-      // TODO
+    for (std::vector<std::string> const & pair : query) {
+      const char *value = tags[pair[0].c_str()];
+      if (pair.size() == 2 && pair[1].empty()) {
+        if (value != nullptr)
+          return false;
+      } else {
+        if (value == nullptr)
+          return false;
+        if (pair.size() > 1) {
+          // TODO: substrings?
+          bool found = false;
+          for (size_t i = 1; i < pair.size(); i++) {
+            if (!strcmp(value, pair[i].c_str())) {
+              found = true;
+              break;
+            }
+          }
+          if (!found)
+            return false;
+        }
+      }
     }
     return true;
   }

@@ -8,7 +8,7 @@ source = 'auchan.ru'
 # Not adding a ref:auchan tag, since we don't have good identifiers
 no_dataset_id = True
 # Using a name query with regular expressions
-query = [('shop', '~supermarket|mall'), ('name', '~Ашан|АШАН')]
+query = [('shop', 'supermarket', 'mall'), ('name', '~Ашан|АШАН')]
 master_tags = ('name', 'opening_hours', 'phone', 'website')
 # Empty dict so we don't add a fixme tag to unmatched objects
 tag_unmatched = {}

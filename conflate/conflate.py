@@ -73,13 +73,14 @@ class OSMPoint(SourcePoint):
     """An OSM points is a SourcePoint with a few extra fields.
     Namely, version, members (for ways and relations), and an action.
     The id is compound and created from object type and object id."""
-    def __init__(self, ptype, pid, version, lat, lon, tags=None):
+    def __init__(self, ptype, pid, version, lat, lon, tags=None, categories=None):
         super().__init__('{}{}'.format(ptype[0], pid), lat, lon, tags)
         self.osm_type = ptype
         self.osm_id = pid
         self.version = version
         self.members = None
         self.action = None
+        self.categories = categories or set()
 
     def copy(self):
         """Returns a copy of this object, except for members field."""
@@ -207,27 +208,35 @@ class OsmConflator:
         (k, v) turns into [k=v], (k,) into [k], (k, None) into [!k], (k, "~v") into [k~v]."""
         tags = self.profile.get(
             'query', required="a list of tuples. E.g. [('amenity', 'cafe'), ('name', '~Mc.*lds')]")
+        tag_strs = []
         if isinstance(tags, str):
-            tag_str = tags
+            tag_strs = [tags]
         else:
-            tag_str = ''
-            for t in tags:
-                if len(t) == 1:
-                    q = '"{}"'.format(t[0])
-                elif t[1] is None or len(t[1]) == 0:
-                    q = '"!{}"'.format(t[0])
-                elif t[1][0] == '~':
-                    q = '"{}"~"{}"'.format(t[0], t[1][1:])
-                else:
-                    q = '"{}"="{}"'.format(t[0], t[1])
-                tag_str += '[' + q + ']'
+            if isinstance(tags[0][0], str):
+                tags = [tags]
+            for tags_q in tags:
+                tag_str = ''
+                for t in tags_q:
+                    if len(t) == 1:
+                        q = '"{}"'.format(t[0])
+                    elif t[1] is None or len(t[1]) == 0:
+                        q = '"!{}"'.format(t[0])
+                    elif t[1][0] == '~':
+                        q = '"{}"~"{}",i'.format(t[0], t[1][1:])
+                    elif len(t) > 2:
+                        q = '"{}"~"^({})$"'.format(t[0], '|'.join(t[1:]))
+                    else:
+                        q = '"{}"="{}"'.format(t[0], t[1])
+                    tag_str += '[' + q + ']'
+                tag_strs.append(tag_str)
 
         timeout = self.profile.get('overpass_timeout', 120)
         query = '[out:xml]{};('.format('' if timeout is None else '[timeout:{}]'.format(timeout))
         for bbox in bboxes:
             bbox_str = '' if bbox is None else '(' + ','.join([str(x) for x in bbox]) + ')'
-            for t in ('node', 'way', 'relation["type"="multipolygon"]'):
-                query += t + tag_str + bbox_str + ';'
+            for tag_str in tag_strs:
+                for t in ('node', 'way', 'relation["type"="multipolygon"]'):
+                    query += t + tag_str + bbox_str + ';'
         if self.ref is not None:
             for t in ('node', 'way', 'relation'):
                 query += t + '["' + self.ref + '"];'
@@ -347,21 +356,67 @@ class OsmConflator:
         return [get_bbox(b, padding) for b in boxes]
 
     def get_categories(self, tags):
+        def match_query(tags, query):
+            for tag in query:
+                if len(tag) == 1:
+                    if tag[0] in tags:
+                        return False
+                    elif tag[1] is None or tag[1] == '':
+                        if tag[0] not in tags:
+                            return False
+                    else:
+                        value = tags.get(tag[0], None)
+                        if value is None:
+                            return False
+                        found = False
+                        for t2 in tag[1:]:
+                            if t2[0] == '~':
+                                m = re.search(t2[1:], value)
+                                if not m:
+                                    return False
+                            elif t2[0] == '!':
+                                if t2[1:].lower() in value.lower():
+                                    found = True
+                            elif t2 == value:
+                                found = True
+                            if found:
+                                break
+                        if not found:
+                            return False
+            return True
+
+        def tags_to_query(tags):
+            return [(k, v) for k, v in tags.items()]
+
+        result = set()
         qualifies = self.profile.get('qualifies', args=tags)
         if qualifies is not None:
-            return qualifies
+            if qualifies:
+                result.add('')
+            return result
 
-        categories = ['']
+        # First check default query
         query = self.profile.get('query', None)
-        if query is not None and not isinstance(query, str):
-            for tag in query:
-                if len(tag) >= 1:
-                    if tag[0] not in tags:
-                        return False
-                    if len(tag) >= 2 and tag[1][0] != '~':
-                        if tag[1] != tags[tag[0]]:
-                            return False
-        return categories
+        if query is not None:
+            if isinstance(query, str):
+                result.add('')
+            else:
+                if isinstance(query[0][0], str):
+                    query = [query]
+                for q in query:
+                    if match_query(tags, q):
+                        result.add('')
+                        break
+
+        # Then check each category if we got these
+        categories = self.profile.get('categories', {})
+        for name, params in categories.items():
+            if 'tags' not in params and 'query' not in params:
+                raise ValueError('No tags and query attributes for category "{}"'.format(name))
+            if match_query(tags, params.get('query', tags_to_query(params.get('tags')))):
+                result.add(name)
+
+        return result
 
     def download_osm(self):
         """Constructs an Overpass API query and requests objects
@@ -457,7 +512,7 @@ class OsmConflator:
                 continue
             pt = OSMPoint(
                 el.tag, int(el.get('id')), int(el.get('version')),
-                coord[0], coord[1], tags)
+                coord[0], coord[1], tags, categories)
             pt.members = members
             if pt.is_poi():
                 if callable(weight_fn):
@@ -846,6 +901,20 @@ def read_dataset(profile, fileobj):
         required='returns a list of SourcePoints with the dataset')
 
 
+def add_categories_to_dataset(profile, dataset):
+    tag = profile.get('category_tag')
+    categories = profile.get('categories')
+    if not tag or not categories:
+        return
+    for d in dataset:
+        if tag in d.tags:
+            d.category = d.tags[tag]
+            del d.tags[tag]
+            cat_tags = categories.get(d.category, {}).get('tags', None)
+            if cat_tags:
+                d.tags.update(cat_tags)
+
+
 def transform_dataset(profile, dataset):
     """Transforms tags in the dataset using the "transform" method in the profile
     or the instructions in that field in string or dict form."""
@@ -928,7 +997,7 @@ def write_for_filter(profile, dataset, f):
                 if len(part) == 1:
                     parts.append(part[0])
                 elif part[1] is None or len(part[1]) == 0:
-                    parts.append('!'+part[0])
+                    parts.append('{}='.format(part[0]))
                 elif part[1][0] == '~':
                     raise ValueError('Cannot use regular expressions in filter')
                 elif '|' in part[1] or ';' in part[1]:
@@ -938,19 +1007,29 @@ def write_for_filter(profile, dataset, f):
             result.append('|'.join(parts))
         return result
 
+    def tags_to_query(tags):
+        return [(k, v) for k, v in tags.items()]
+
     categories = profile.get('categories', {})
-    if None not in categories:
-        categories[None] = profile.get('query')
+    p_query = profile.get('query', None)
+    if p_query is not None:
+        categories[None] = {'query': p_query}
     cat_map = {}
     i = 0
-    for name, query in categories.items():
-        for tags in query_to_tag_strings(query):
-            f.write('{},{},{}\n'.format(i, name or '', tags))
-        cat_map[name] = i
-        i += 1
+    try:
+        for name, query in categories.items():
+            for tags in query_to_tag_strings(query.get('query', tags_to_query(query.get('tags')))):
+                f.write('{},{},{}\n'.format(i, name or '', tags))
+            cat_map[name] = i
+            i += 1
+    except ValueError as e:
+        logging.error(e)
+        return False
     f.write('\n')
     for d in dataset:
-        f.write('{},{},{}\n'.format(d.lon, d.lat, cat_map[d.category]))
+        if d.category in cat_map:
+            f.write('{},{},{}\n'.format(d.lon, d.lat, cat_map[d.category]))
+    return True
 
 
 def run(profile=None):
@@ -995,11 +1074,12 @@ def run(profile=None):
         logging.error('Empty source dataset')
         sys.exit(2)
     transform_dataset(profile, dataset)
+    add_categories_to_dataset(profile, dataset)
     logging.info('Read %s items from the dataset', len(dataset))
 
     if options.for_filter:
-        write_for_filter(profile, dataset, options.for_filter)
-        logging.info('Prepared data for filtering, exitting')
+        if write_for_filter(profile, dataset, options.for_filter):
+            logging.info('Prepared data for filtering, exitting')
         return
 
     audit = None
