@@ -32,46 +32,33 @@
 #include <osmium/visitor.hpp>
 
 #include "RTree.h"
+#include "xml_centers_output.hpp"
 
 using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type,
                                                osmium::Location>;
 using location_handler_type = osmium::handler::NodeLocationsForWays<index_type>;
 
-class AmenityRelationsManager : public osmium::relations::RelationsManager<AmenityRelationsManager, false, true, false> {
-public:
-
-  bool new_relation(osmium::Relation const & rel) noexcept {
-    const char *rel_type = rel.tags().get_value_by_key("type");
-    return rel_type && !std::strcmp(rel_type, "multipolygon");
-  }
-
-  void complete_relation(osmium::Relation const & rel) {
-    this->buffer().add_item(rel);
-    this->buffer().commit();
-  }
-};
-
 bool AppendToVector(uint16_t cat_id, void *vec) {
   static_cast<std::vector<uint16_t>*>(vec)->push_back(cat_id);
+  return true;
 }
 
 class AmenityHandler : public osmium::handler::Handler {
 
-  constexpr static double kSearchRadius = 0.001; // ~1 km TODO! revert to 0.01
+  constexpr static double kSearchRadius = 0.0001; // ~1 km TODO! revert to 0.01
 
   typedef RTree<uint16_t, int32_t, 2, double> DatasetTree;
   typedef std::vector<std::vector<std::string>> TQuery;
   typedef std::vector<TQuery> TCategory;
 
   DatasetTree m_tree;
-  osmium::io::Writer &m_writer;
+  osmium::io::xmlcenters::XMLCentersOutput m_centers;
   std::map<uint16_t, std::vector<TQuery>> m_categories;
   std::map<uint16_t, std::string> m_category_names;
 
   void print_object(const osmium::OSMObject &obj,
                     const osmium::Location &center) {
-    // TODO
-    std::cout << obj.type() << ' ' << obj.id() << std::endl;
+    std::cout << m_centers.apply(obj, center);
   }
 
   // Calculate the center point of a NodeRefList.
@@ -134,11 +121,13 @@ class AmenityHandler : public osmium::handler::Handler {
 
   TQuery ParseQuery(std::string const & query) {
     TQuery q;
-    std::vector<std::string> parts, keys;
+    std::vector<std::string> parts;
     SplitTrim(query, '|', 100, parts);
     for (std::string const & part : parts) {
+      std::vector<std::string> keys;
       SplitTrim(part, '=', 100, keys);
-      // TODO
+      if (keys.size() > 0)
+          q.push_back(keys);
     }
     return q;
   }
@@ -169,8 +158,7 @@ class AmenityHandler : public osmium::handler::Handler {
   }
 
 public:
-  AmenityHandler(const char *categories, osmium::io::Writer &writer)
-      : m_writer(writer) {
+  AmenityHandler(const char *categories) {
     LoadCategories(categories);
   }
 
@@ -201,24 +189,7 @@ public:
     }
   }
 
-  void relation(osmium::Relation const & rel) {
-    int64_t x = 0, y = 0, cnt = 0;
-    for (const auto& member : rel.members()) {
-        if (member.full_member() && member.type() == osmium::item_type::way) {
-            const osmium::Way *way = reinterpret_cast<const osmium::Way*>(&member.get_object());
-            for (const auto& node_ref : way->nodes()) {
-                if (false && node_ref.location()) {
-                    x += node_ref.x();
-                    y += node_ref.y();
-                    cnt++;
-                }
-            }
-        }
-    }
-    if (!cnt)
-      return;
-
-    const osmium::Location center(x / cnt, y / cnt);
+  void multi(osmium::Relation const & rel, osmium::Location const & center) {
     if (IsEligible(center, rel.tags())) {
       print_object(rel, center);
     }
@@ -226,37 +197,67 @@ public:
 
 }; // class AmenityHandler
 
+class AmenityRelationsManager : public osmium::relations::RelationsManager<AmenityRelationsManager, false, true, false> {
+
+    AmenityHandler *m_handler;
+
+public:
+
+  AmenityRelationsManager(AmenityHandler & handler) :
+      RelationsManager(),
+      m_handler(&handler) {
+  }
+
+  bool new_relation(osmium::Relation const & rel) noexcept {
+    const char *rel_type = rel.tags().get_value_by_key("type");
+    return rel_type && !std::strcmp(rel_type, "multipolygon");
+  }
+
+  void complete_relation(osmium::Relation const & rel) {
+    int64_t x = 0, y = 0, cnt = 0;
+    for (auto const & member : rel.members()) {
+        if (member.ref() != 0) {
+            const osmium::Way* way = this->get_member_way(member.ref());
+            for (const auto& node_ref : way->nodes()) {
+                if (node_ref.location()) {
+                    x += node_ref.x();
+                    y += node_ref.y();
+                    cnt++;
+                }
+            }
+        }
+    }
+    if (cnt > 0)
+        m_handler->multi(rel, osmium::Location{x / cnt, y / cnt});
+  }
+}; // class AmenityRelationsManager
+
 int main(int argc, char *argv[]) {
   if (argc < 3) {
     std::cerr << "Usage: " << argv[0]
-              << " <dataset.lst> <osmfile> [<output.xml>]\n";
+              << " <dataset.lst> <osmfile>\n";
     std::exit(1);
   }
 
   const osmium::io::File input_file{argv[2]};
-  const osmium::io::File output_file{argc > 3 ? argv[3] : "", "osm"};
+  const osmium::io::File output_file{"", "osm"};
 
-  std::cerr << "Pass 1/2: Reading relations...\n";
-  AmenityRelationsManager manager;
+  AmenityHandler data_handler(argv[1]);
+  AmenityRelationsManager manager(data_handler);
   osmium::relations::read_relations(input_file, manager);
 
   osmium::io::Header header;
   header.set("generator", argv[0]);
   osmium::io::Writer writer{output_file, header, osmium::io::overwrite::allow};
-  AmenityHandler data_handler(argv[1], writer);
 
-  std::cerr << "Pass 2/2: Filtering points...\n";
   index_type index;
   location_handler_type location_handler{index};
   location_handler.ignore_errors();
   osmium::io::Reader reader{input_file};
 
-  osmium::apply(reader, location_handler, data_handler,
-                manager.handler(
-                    [&data_handler](const osmium::memory::Buffer &area_buffer) {
-                      osmium::apply(area_buffer, data_handler);
-                    }));
+  osmium::apply(reader, location_handler, data_handler, manager.handler());
 
+  std::cout.flush();
   reader.close();
   writer.close();
 }

@@ -10,5 +10,6 @@ add_executable(
   ${NAME}
   ${NAME}.cpp
   RTree.h
+  xml_centers_output.hpp
 )
 target_link_libraries(${NAME} ${OSMIUM_IO_LIBRARIES})
