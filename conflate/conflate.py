@@ -209,9 +209,12 @@ class OsmConflator:
         if isinstance(tags, str):
             tag_strs = [tags]
         else:
-            if isinstance(tags[0][0], str):
+            if not isinstance(tags[0], str) and isinstance(tags[0][0], str):
                 tags = [tags]
             for tags_q in tags:
+                if isinstance(tags_q, str):
+                    tag_strs.append(tags_q)
+                    continue
                 tag_str = ''
                 for t in tags_q:
                     if len(t) == 1:
@@ -989,9 +992,11 @@ def write_for_filter(profile, dataset, f):
         if isinstance(query, str):
             raise ValueError('Query string for filter should not be a string')
         result = []
-        if isinstance(query[0][0], str):
+        if not isinstance(query[0], str) and isinstance(query[0][0], str):
             query = [query]
         for q in query:
+            if isinstance(q, str):
+                raise ValueError('Query string for filter should not be a string')
             parts = []
             for part in q:
                 if len(part) == 1:
