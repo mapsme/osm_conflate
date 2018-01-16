@@ -903,15 +903,17 @@ def read_dataset(profile, fileobj):
 
 
 def add_categories_to_dataset(profile, dataset):
-    tag = profile.get('category_tag')
     categories = profile.get('categories')
-    if not tag or not categories:
+    if not categories:
         return
+    tag = profile.get('category_tag')
+    other = categories.get('other', {})
     for d in dataset:
-        if tag in d.tags:
+        if tag and tag in d.tags:
             d.category = d.tags[tag]
             del d.tags[tag]
-            cat_tags = categories.get(d.category, {}).get('tags', None)
+        if d.category:
+            cat_tags = categories.get(d.category, other).get('tags', None)
             if cat_tags:
                 d.tags.update(cat_tags)
 

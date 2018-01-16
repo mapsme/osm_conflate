@@ -2,6 +2,13 @@
 
 ## master branch
 
+* Support for categories: `category_tag` and `categories` parameters in a profile.
+* LibOsmium-based C++ filtering script for categories.
+* More than one tag value works as "one of": `[('amenity', 'cafe', 'restaurant')]`.
+* Query can be a list of queries, providing for "OR" clause. An example:
+
+    `[[('amenity', 'swimming_pool')], [('leisure', 'swimming_pool')]]`.
+
 ## 1.2.3
 
 _Released 2017-12-29_
