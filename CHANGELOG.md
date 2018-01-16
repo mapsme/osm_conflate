@@ -7,7 +7,7 @@
 * More than one tag value works as "one of": `[('amenity', 'cafe', 'restaurant')]`.
 * Query can be a list of queries, providing for "OR" clause. An example:
 
-    `[[('amenity', 'swimming_pool')], [('leisure', 'swimming_pool')]]`.
+    `[[('amenity', 'swimming_pool')], [('leisure', 'swimming_pool')]]`
 
 * Parameters for profiles, using `-p` argument.
 * No more default imports solely for profiles, import `re` and `zipfile` youself now.
