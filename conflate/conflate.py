@@ -141,7 +141,6 @@ class Profile:
     is required, you will be notified of that.
     """
     def __init__(self, fileobj):
-        self.param = None
         if isinstance(fileobj, dict):
             self.profile = fileobj
         elif hasattr(fileobj, 'read'):
@@ -940,8 +939,9 @@ def run(profile=None):
 
     if not profile:
         logging.debug('Loading profile %s', options.profile)
+    global param
+    param = options.param
     profile = Profile(profile or options.profile)
-    profile.param = options.param
 
     dataset = read_dataset(profile, options.source)
     if not dataset:
