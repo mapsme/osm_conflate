@@ -9,6 +9,9 @@
 
     `[[('amenity', 'swimming_pool')], [('leisure', 'swimming_pool')]]`.
 
+* Parameters for profiles, using `-p` argument.
+* No more default imports solely for profiles, import `re` and `zipfile` youself now.
+
 ## 1.2.3
 
 _Released 2017-12-29_
