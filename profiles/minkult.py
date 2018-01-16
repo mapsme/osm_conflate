@@ -5,7 +5,8 @@ import codecs
 
 
 # Reading the dataset passport to determine an URL of the latest dataset version
-def download_url(dataset_id='7705851331-museums'):
+def download_url():
+    dataset_id = '7705851331-' + (param or 'museums')
     r = requests.get('http://opendata.mkrf.ru/opendata/{}/meta.json'.format(dataset_id))
     if r.status_code != 200 or len(r.content) == 0:
         logging.error('Could not get URL for dataset: %s %s', r.status_code, r.text)
@@ -17,8 +18,18 @@ def download_url(dataset_id='7705851331-museums'):
     return latest['source']
 
 source = 'opendata.mkrf.ru'
-dataset_id = 'mkrf_museums'
-query = [('tourism', 'museum')]
+dataset_id = 'mkrf_'+(param or 'museums')
+if not param or param == 'museums':
+    query = [('tourism', 'museum')]
+elif param == 'theaters':
+    query = [('amenity', 'theatre')]
+elif param == 'circuses':
+    query = [('amenity', 'circus')]
+elif param == 'philharmonic':
+    query = [('amenity', 'theatre')]
+else:
+    raise ValueError('Unknown param value: {}'.format(param))
+
 max_distance = 300
 master_tags = ('official_name', 'phone', 'opening_hours', 'website')
 

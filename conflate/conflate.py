@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import codecs
+import json
 import kdtree
 import logging
 import math
@@ -8,10 +9,6 @@ import requests
 import os
 import sys
 from io import BytesIO
-import json    # for profiles
-import re      # for profiles
-import zipfile # for profiles
-from collections import defaultdict # for profiles
 try:
     from .version import __version__
 except ImportError:
