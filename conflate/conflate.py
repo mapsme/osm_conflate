@@ -392,20 +392,20 @@ class OsmConflator:
         qualifies = self.profile.get('qualifies', args=tags)
         if qualifies is not None:
             if qualifies:
-                result.add('')
+                result.add(None)
             return result
 
         # First check default query
         query = self.profile.get('query', None)
         if query is not None:
             if isinstance(query, str):
-                result.add('')
+                result.add(None)
             else:
                 if isinstance(query[0][0], str):
                     query = [query]
                 for q in query:
                     if match_query(tags, q):
-                        result.add('')
+                        result.add(None)
                         break
 
         # Then check each category if we got these
@@ -701,7 +701,8 @@ class OsmConflator:
                 nearest = [p for p in nearest if match_func(p[0].data.tags, point.tags)]
                 if not nearest:
                     return None, None
-            nearest = [(n[0], n[0].data.distance(point)) for n in nearest]
+            nearest = [(n[0], n[0].data.distance(point))
+                       for n in nearest if point.category in n[0].data.categories]
             return sorted(nearest, key=lambda kv: kv[1])[0]
 
         if not self.osmdata:
