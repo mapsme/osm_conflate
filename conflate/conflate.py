@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import codecs
+import json
 import kdtree
 import logging
 import math
@@ -8,10 +9,6 @@ import requests
 import os
 import sys
 from io import BytesIO
-import json    # for profiles
-import re      # for profiles
-import zipfile # for profiles
-from collections import defaultdict # for profiles
 try:
     from .version import __version__
 except ImportError:
@@ -1045,6 +1042,7 @@ def run(profile=None):
     parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
     parser.add_argument('-a', '--audit', type=argparse.FileType('r'), help='Conflation validation result as a JSON file')
     parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='Output OSM XML file name')
+    parser.add_argument('-p', '--param', help='Optional parameter for the profile')
     parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
     parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
     parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
@@ -1070,6 +1068,8 @@ def run(profile=None):
 
     if not profile:
         logging.debug('Loading profile %s', options.profile)
+    global param
+    param = options.param
     profile = Profile(profile or options.profile)
 
     dataset = read_dataset(profile, options.source)

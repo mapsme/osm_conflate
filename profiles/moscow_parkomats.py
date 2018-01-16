@@ -1,12 +1,10 @@
-# Available modules: codecs, logging, requests, json, re, etree. But importing these helps catch other errors
+# Available modules: codecs, logging, requests, json, etree. But importing these helps catch other errors
 import json
-import re
 import logging
-import requests
-import zipfile
 
 
 def download_url(mos_dataset_id=1421):
+    import requests
     r = requests.get('https://data.mos.ru/api/datasets/expformats/?datasetId={}'.format(mos_dataset_id))
     if r.status_code != 200 or len(r.content) == 0:
         logging.error('Could not get URL for dataset: %s %s', r.status_code, r.text)
@@ -15,7 +13,7 @@ def download_url(mos_dataset_id=1421):
     url = [x for x in r.json() if x['Format'] == 'json'][0]
     version = '?'
     title = 'dataset'
-    r = requests.get('https://data.mos.ru/apiproxy/opendata/1421/meta.json'.format(mos_dataset_id))
+    r = requests.get('https://data.mos.ru/apiproxy/opendata/{}/meta.json'.format(mos_dataset_id))
     if r.status_code == 200:
         title = r.json()['Title']
         version = r.json()['VersionNumber']
@@ -50,6 +48,8 @@ master_tags = ('zone:parking', 'ref', 'contact:phone', 'contact:website', 'opera
 
 # A list of SourcePoint objects. Initialize with (id, lat, lon, {tags}).
 def dataset(fileobj):
+    import zipfile
+    import re
     zf = zipfile.ZipFile(fileobj)
     source = json.loads(zf.read(zf.namelist()[0]).decode('cp1251'))
     RE_NUM4 = re.compile(r'\d{4,6}')

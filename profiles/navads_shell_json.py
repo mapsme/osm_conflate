@@ -56,6 +56,7 @@ def dataset(fileobj):
             return '24/7'
         return '; '.join(res).replace('23:59', '24:00')
 
+    global re, defaultdict
     source = json.load(codecs.getreader('utf-8-sig')(fileobj))
     data = []
     for el in source['Locations']:

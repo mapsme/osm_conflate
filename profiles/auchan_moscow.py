@@ -44,7 +44,7 @@ def dataset(fileobj):
 
     # We are parsing HTML, and for that we need an lxml package
     from lxml import html
-    global download_url_copy
+    global download_url_copy, re
     h = html.fromstring(fileobj.read().decode('utf-8'))
     shops = h.find_class('shops-in-the-city-holder')[0]
     shops.make_links_absolute(download_url_copy)
