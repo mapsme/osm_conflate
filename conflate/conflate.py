@@ -31,8 +31,8 @@ CONTACT_KEYS = set(('phone', 'website', 'email', 'fax', 'facebook', 'twitter', '
 
 class SourcePoint:
     """A common class for points. Has an id, latitude and longitude,
-    and a dict of tags."""
-    def __init__(self, pid, lat, lon, tags=None, category=None):
+    and a dict of tags. Remarks are optional for reviewers hints only."""
+    def __init__(self, pid, lat, lon, tags=None, category=None, remarks=None):
         self.id = str(pid)
         self.lat = lat
         self.lon = lon
@@ -40,6 +40,7 @@ class SourcePoint:
             k.lower(): str(v).strip() for k, v in tags.items() if v is not None}
         self.category = category
         self.dist_offset = 0
+        self.remarks = remarks
 
     def distance(self, other):
         """Calculate distance in meters."""
@@ -73,18 +74,20 @@ class OSMPoint(SourcePoint):
     """An OSM points is a SourcePoint with a few extra fields.
     Namely, version, members (for ways and relations), and an action.
     The id is compound and created from object type and object id."""
-    def __init__(self, ptype, pid, version, lat, lon, tags=None):
+    def __init__(self, ptype, pid, version, lat, lon, tags=None, categories=None):
         super().__init__('{}{}'.format(ptype[0], pid), lat, lon, tags)
         self.osm_type = ptype
         self.osm_id = pid
         self.version = version
         self.members = None
         self.action = None
+        self.remarks = None
 
     def copy(self):
         """Returns a copy of this object, except for members field."""
         c = OSMPoint(self.osm_type, self.osm_id, self.version, self.lat, self.lon, self.tags.copy())
         c.action = self.action
+        c.remarks = self.remarks
         return c
 
     def is_area(self):
@@ -568,6 +571,8 @@ class OsmConflator:
                     else:
                         props['tags_changed.{}'.format(k)] = '{} -> {}'.format(v0, v1)
             props['marker-color'] = MARKER_COLORS[marker_action]
+            if ref and ref.remarks:
+                props['__remarks__'] = ref.remarks
             return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
