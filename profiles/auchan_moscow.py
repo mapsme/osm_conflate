@@ -8,7 +8,7 @@ source = 'auchan.ru'
 # Not adding a ref:auchan tag, since we don't have good identifiers
 no_dataset_id = True
 # Using a name query with regular expressions
-query = [('shop', '~supermarket|mall'), ('name', '~Ашан|АШАН')]
+query = [('shop', 'supermarket', 'mall'), ('name', '~Ашан|АШАН')]
 master_tags = ('name', 'opening_hours', 'phone', 'website')
 # Empty dict so we don't add a fixme tag to unmatched objects
 tag_unmatched = {}
@@ -44,7 +44,7 @@ def dataset(fileobj):
 
     # We are parsing HTML, and for that we need an lxml package
     from lxml import html
-    global download_url_copy
+    global download_url_copy, re
     h = html.fromstring(fileobj.read().decode('utf-8'))
     shops = h.find_class('shops-in-the-city-holder')[0]
     shops.make_links_absolute(download_url_copy)

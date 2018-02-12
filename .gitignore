@@ -6,6 +6,9 @@
 *.gz
 *.csv
 *.pyc
+*.pbf
+*.lst
+*.user
 private/
 data/
 __pycache__/

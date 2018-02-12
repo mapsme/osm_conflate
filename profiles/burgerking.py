@@ -1,3 +1,7 @@
+# Note: the json file at the burgerking website was restructured
+# and does not contain any useful data now.
+# So this profile is here solely for demonstration purposes.
+
 import json
 import codecs
 import re
@@ -20,6 +24,7 @@ tag_unmatched = {
 
 def dataset(fileobj):
     def parse_hours(s):
+        global re
         s = re.sub('^зал:? *', '', s.lower())
         s = s.replace('<br />', ';').replace('<br>', ';').replace('\n', ';').replace(' ', '').replace(',', ';').replace('–', '-')
         s = s.replace('-00:', '-24:')
@@ -66,7 +71,11 @@ def dataset(fileobj):
         346: 'Передвинуть к кафе',
 
     }
-    source = json.load(codecs.getreader('utf-8')(fileobj))
+    json_src = codecs.getreader('utf-8')(fileobj).read()
+    p = json_src.find('<div')
+    if p > 0:
+        json_src = json_src[:p]
+    source = json.loads(json_src)
     data = []
     for el in source:
         gid = int(el['origID'])
