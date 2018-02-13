@@ -86,7 +86,7 @@ class OSMPoint(SourcePoint):
         c = OSMPoint(self.osm_type, self.osm_id, self.version, self.lat, self.lon, self.tags.copy())
         c.action = self.action
         c.remarks = self.remarks
-        c.categories = self.categories
+        c.categories = self.categories.copy()
         return c
 
     def is_area(self):
