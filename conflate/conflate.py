@@ -630,7 +630,7 @@ class OsmConflator:
                         props['tags_changed.{}'.format(k)] = '{} -> {}'.format(v0, v1)
             props['marker-color'] = MARKER_COLORS[marker_action]
             if ref and ref.remarks:
-                props['__remarks__'] = ref.remarks
+                props['_remarks'] = ref.remarks
             return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
