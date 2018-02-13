@@ -28,8 +28,8 @@ CONTACT_KEYS = set(('phone', 'website', 'email', 'fax', 'facebook', 'twitter', '
 
 class SourcePoint:
     """A common class for points. Has an id, latitude and longitude,
-    and a dict of tags."""
-    def __init__(self, pid, lat, lon, tags=None, category=None):
+    and a dict of tags. Remarks are optional for reviewers hints only."""
+    def __init__(self, pid, lat, lon, tags=None, category=None, remarks=None):
         self.id = str(pid)
         self.lat = lat
         self.lon = lon
@@ -37,6 +37,7 @@ class SourcePoint:
             k.lower(): str(v).strip() for k, v in tags.items() if v is not None}
         self.category = category
         self.dist_offset = 0
+        self.remarks = remarks
 
     def distance(self, other):
         """Calculate distance in meters."""
@@ -78,11 +79,14 @@ class OSMPoint(SourcePoint):
         self.members = None
         self.action = None
         self.categories = categories or set()
+        self.remarks = None
 
     def copy(self):
         """Returns a copy of this object, except for members field."""
         c = OSMPoint(self.osm_type, self.osm_id, self.version, self.lat, self.lon, self.tags.copy())
         c.action = self.action
+        c.remarks = self.remarks
+        c.categories = self.categories.copy()
         return c
 
     def is_area(self):
@@ -625,6 +629,8 @@ class OsmConflator:
                     else:
                         props['tags_changed.{}'.format(k)] = '{} -> {}'.format(v0, v1)
             props['marker-color'] = MARKER_COLORS[marker_action]
+            if ref and ref.remarks:
+                props['remarks'] = ref.remarks
             return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
