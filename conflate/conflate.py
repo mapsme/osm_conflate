@@ -436,6 +436,8 @@ class OsmConflator:
         query = self.construct_overpass_query(bboxes)
         logging.debug('Overpass query: %s', query)
         r = requests.get(OVERPASS_SERVER + 'interpreter', {'data': query})
+        if r.encoding is None:
+            r.encoding = 'utf-8'
         if r.status_code != 200:
             logging.error('Failed to download data from Overpass API: %s', r.status_code)
             if 'rate_limited' in r.text:
@@ -443,6 +445,9 @@ class OsmConflator:
                 logging.warning('Seems like you are rate limited. API status:\n%s', r.text)
             else:
                 logging.error('Error message: %s', r.text)
+            raise IOError()
+        if 'runtime error: Query timed out' in r.text:
+            logging.error('Query timed out, try increasing the "overpass_timeout" profile variable')
             raise IOError()
         self.parse_osm(r.content)
 
