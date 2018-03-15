@@ -6,6 +6,7 @@ import kdtree
 import logging
 import math
 import requests
+import re
 import os
 import sys
 from io import BytesIO
@@ -24,6 +25,8 @@ OSM_API_SERVER = 'https://api.openstreetmap.org/api/0.6/'
 BBOX_PADDING = 0.003  # in degrees, ~330 m default
 MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
 CONTACT_KEYS = set(('phone', 'website', 'email', 'fax', 'facebook', 'twitter', 'instagram'))
+LIFECYCLE_KEYS = set(('amenity', 'shop', 'tourism', 'craft', 'office'))
+LIFECYCLE_PREFIXES = ('proposed', 'construction', 'disused', 'abandoned', 'was', 'removed')
 
 
 class SourcePoint:
@@ -544,6 +547,12 @@ class OsmConflator:
                 return 'contact:'+k
             elif k.startswith('contact:') and k not in osm_tags and k[8:] in osm_tags:
                 return k[8:]
+
+            # Now conflating lifecycle prefixes, only forward
+            if k in LIFECYCLE_KEYS and k not in osm_tags:
+                for prefix in LIFECYCLE_PREFIXES:
+                    if prefix+':'+k in osm_tags:
+                        return prefix+':'+k
             return k
 
         def update_tags(tags, source, master_tags=None, retagging=False, audit=None):
