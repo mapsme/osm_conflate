@@ -9,6 +9,7 @@
 *.pbf
 *.lst
 *.user
+*.log
 private/
 data/
 __pycache__/
