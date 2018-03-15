@@ -10,7 +10,11 @@
     `[[('amenity', 'swimming_pool')], [('leisure', 'swimming_pool')]]`
 
 * Parameters for profiles, using `-p` argument.
-* No more default imports solely for profiles, import `re` and `zipfile` youself now.
+* No more default imports solely for profiles, import `zipfile` youself now.
+* Remarks for source points, thanks [@nixi](https://github.com/hixi).
+* Better error message for Overpass API timeouts.
+* Lifecycle prefixes are conflated, e.g. `amenity=*` and `was:amenity=*`.
+* Dataset is checked for duplicates, which are reported (see `-d`) and removed.
 
 ## 1.2.3
 
