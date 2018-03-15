@@ -1007,6 +1007,57 @@ def transform_dataset(profile, dataset):
             d.tags[key] = value
 
 
+def check_dataset_for_duplicates(profile, dataset, print_all=False):
+    # First checking for duplicate ids and collecting tags with varying values
+    ids = set()
+    tags = {}
+    found_duplicate_ids = False
+    for d in dataset:
+        if d.id in ids:
+            found_duplicate_ids = True
+            logging.error('Duplicate id {} in the dataset'.format(d.id))
+        ids.add(d.id)
+        for k, v in d.tags.items():
+            if k not in tags:
+                tags[k] = v
+            elif tags[k] != '---' and tags[k] != v:
+                tags[k] = '---'
+
+    # And then for near-duplicate points with similar tags
+    max_distance = profile.get('max_distance', MAX_DISTANCE)
+    uncond_distance = profile.get('duplicate_distance', 0)
+    diff_tags = [k for k in tags if tags[k] == '---']
+    kd = kdtree.create(list(dataset))
+    duplicates = set()
+    for d in dataset:
+        if d.id in duplicates:
+            continue
+        for alt, _ in kd.search_knn(d, 3):  # The first one will be equal to d
+            if alt.data.id != d.id and alt.data.distance(d) < max_distance:
+                tags_differ = 0
+                if alt.data.distance(d) > uncond_distance:
+                    for k in diff_tags:
+                        if alt.data.tags.get(k) != d.tags.get(k):
+                            tags_differ += 1
+                if tags_differ <= len(diff_tags) / 2:
+                    duplicates.add(alt.data.id)
+                    if print_all or len(duplicates) <= 5:
+                        is_duplicate = tags_differ <= 1
+                        logging.error('Dataset points %s: %s and %s',
+                                      'duplicate each other' if is_duplicate else 'are too similar',
+                                      d.id, alt.data.id)
+    if duplicates:
+        remove = profile.get('remove_duplicates', True)
+        if remove:
+            for i in reversed(range(len(dataset))):
+                if dataset[i].id in duplicates:
+                    del dataset[i]
+        logging.error('%s %s duplicates from the dataset',
+                      'Removed' if remove else 'Found', len(duplicates))
+    if found_duplicate_ids:
+        raise KeyError('Cannot continue with duplicate ids')
+
+
 def write_for_filter(profile, dataset, f):
     def query_to_tag_strings(query):
         if isinstance(query, str):
@@ -1063,18 +1114,33 @@ def run(profile=None):
         Reads a profile with source data and conflates it with OpenStreetMap data.
         Produces an JOSM XML file ready to be uploaded.'''.format(TITLE))
     if not profile:
-        parser.add_argument('profile', type=argparse.FileType('r'), help='Name of a profile (python or json) to use')
-    parser.add_argument('-i', '--source', type=argparse.FileType('rb'), help='Source file to pass to the profile dataset() function')
-    parser.add_argument('-a', '--audit', type=argparse.FileType('r'), help='Conflation validation result as a JSON file')
-    parser.add_argument('-o', '--output', type=argparse.FileType('w'), help='Output OSM XML file name')
-    parser.add_argument('-p', '--param', help='Optional parameter for the profile')
-    parser.add_argument('--osc', action='store_true', help='Produce an osmChange file instead of JOSM XML')
-    parser.add_argument('--osm', help='Instead of querying Overpass API, use this unpacked osm file. Create one from Overpass data if not found')
-    parser.add_argument('-c', '--changes', type=argparse.FileType('w'), help='Write changes as GeoJSON for visualization')
-    parser.add_argument('-m', '--check-move', action='store_true', help='Check for moveability of modified modes')
-    parser.add_argument('-f', '--for-filter', type=argparse.FileType('w'), help='Prepare a file for the filtering script')
-    parser.add_argument('--verbose', '-v', action='store_true', help='Display debug messages')
-    parser.add_argument('--quiet', '-q', action='store_true', help='Do not display informational messages')
+        parser.add_argument('profile', type=argparse.FileType('r'),
+                            help='Name of a profile (python or json) to use')
+    parser.add_argument('-i', '--source', type=argparse.FileType('rb'),
+                        help='Source file to pass to the profile dataset() function')
+    parser.add_argument('-a', '--audit', type=argparse.FileType('r'),
+                        help='Conflation validation result as a JSON file')
+    parser.add_argument('-o', '--output', type=argparse.FileType('w'),
+                        help='Output OSM XML file name')
+    parser.add_argument('-p', '--param',
+                        help='Optional parameter for the profile')
+    parser.add_argument('--osc', action='store_true',
+                        help='Produce an osmChange file instead of JOSM XML')
+    parser.add_argument('--osm',
+                        help='Instead of querying Overpass API, use this unpacked osm file. ' +
+                        'Create one from Overpass data if not found')
+    parser.add_argument('-c', '--changes', type=argparse.FileType('w'),
+                        help='Write changes as GeoJSON for visualization')
+    parser.add_argument('-m', '--check-move', action='store_true',
+                        help='Check for moveability of modified modes')
+    parser.add_argument('-f', '--for-filter', type=argparse.FileType('w'),
+                        help='Prepare a file for the filtering script')
+    parser.add_argument('-d', '--list_duplicates', action='store_true',
+                        help='List all duplicate points in the dataset')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Display debug messages')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='Do not display informational messages')
     options = parser.parse_args()
 
     if not options.output and not options.changes and not options.for_filter:
@@ -1103,6 +1169,7 @@ def run(profile=None):
         sys.exit(2)
     transform_dataset(profile, dataset)
     add_categories_to_dataset(profile, dataset)
+    check_dataset_for_duplicates(profile, dataset, options.list_duplicates)
     logging.info('Read %s items from the dataset', len(dataset))
 
     if options.for_filter:
