@@ -29,8 +29,8 @@ For a simplest case, run:
 
     conflate <profile.py> -o result.osm
 
-You might want to add other arguments
-to pass a dataset file or write the resulting osmChange somewhere. Run
+You might want to add other arguments,
+to pass a dataset file or prepare a preview GeoJSON. Run
 ``conflate -h`` to see a list of arguments.
 
 Uploading to OpenStreetMap

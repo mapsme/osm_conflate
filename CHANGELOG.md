@@ -2,6 +2,10 @@
 
 ## master branch
 
+## 1.3.0
+
+_Released 2018-03-15_
+
 * Support for categories: `category_tag` and `categories` parameters in a profile.
 * LibOsmium-based C++ filtering script for categories.
 * More than one tag value works as "one of": `[('amenity', 'cafe', 'restaurant')]`.
@@ -15,6 +19,7 @@
 * Better error message for Overpass API timeouts.
 * Lifecycle prefixes are conflated, e.g. `amenity=*` and `was:amenity=*`.
 * Dataset is checked for duplicates, which are reported (see `-d`) and removed.
+* Support GeoJSON input (put identifiers into `id` property).
 
 ## 1.2.3
 

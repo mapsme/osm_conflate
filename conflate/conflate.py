@@ -471,11 +471,11 @@ class OsmConflator:
             if center is not None:
                 ways[way.get('id')] = [float(center.get('lat')), float(center.get('lon'))]
             else:
-                logging.warning('Way %s does not have a center', way.get('id'))
+                logging.debug('Way %s does not have a center', way.get('id'))
                 coord = [0, 0]
                 count = 0
                 for nd in way.findall('nd'):
-                    if nd.get('id') in nodes:
+                    if nd.get('ref') in nodes:
                         count += 1
                         for i in range(len(coord)):
                             coord[i] += nodes[nd.get('ref')][i]
@@ -504,6 +504,7 @@ class OsmConflator:
                 if center is not None:
                     coord = [float(center.get('lat')), float(center.get('lon'))]
                 else:
+                    logging.debug('Relation %s does not have a center', el.get('id'))
                     coord = [0, 0]
                     count = 0
                     for m in el.findall('member'):
@@ -515,12 +516,15 @@ class OsmConflator:
                             count += 1
                             for i in range(len(coord)):
                                 coord[i] += ways[m.get('ref')][i]
-                    coord = [coord[0] / count, coord[1] / count]
+                    if count > 0:
+                        coord = [coord[0] / count, coord[1] / count]
                 members = [
                     (m.get('type'), m.get('ref'), m.get('role'))
                     for m in el.findall('member')
                 ]
             else:
+                continue
+            if not coord or coord == [0, 0]:
                 continue
             pt = OSMPoint(
                 el.tag, int(el.get('id')), int(el.get('version')),
@@ -912,8 +916,29 @@ def read_dataset(profile, fileobj):
         try:
             data = []
             reader = codecs.getreader('utf-8')
-            for item in json.load(reader(fileobj)):
-                data.append(SourcePoint(item['id'], item['lat'], item['lon'], item['tags']))
+            json_src = json.load(reader(fileobj))
+            if 'features' in json_src:
+                # Parse GeoJSON
+                for item in json_src['features']:
+                    if item['geometry'].get('type') != 'Point' or 'properties' not in item:
+                        continue
+                    # Get the identifier from "id", "ref", "ref*"
+                    iid = item['properties'].get('id', item['properties'].get('ref'))
+                    if not iid:
+                        for k, v in item['properties'].items():
+                            if k.startswith('ref'):
+                                iid = v
+                                break
+                    if not iid:
+                        continue
+                    data.append(SourcePoint(
+                        iid,
+                        item['geometry']['coordinates'][1],
+                        item['geometry']['coordinates'][0],
+                        {k: v for k, v in item['properties'].items() if k != 'id'}))
+            else:
+                for item in json_src:
+                    data.append(SourcePoint(item['id'], item['lat'], item['lon'], item['tags']))
             return data
         except Exception:
             logging.error('Failed to parse the source as a JSON')
