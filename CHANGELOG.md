@@ -2,6 +2,13 @@
 
 ## master branch
 
+## 1.3.1
+
+_Released 2018-03-20_
+
+* "Similar tags" now means at least 66% instead of 50%.
+* Instead of removing all duplicates, conflating them and removing only unmatched.
+
 ## 1.3.0
 
 _Released 2018-03-15_

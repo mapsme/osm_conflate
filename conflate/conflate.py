@@ -10,6 +10,7 @@ import re
 import os
 import sys
 from io import BytesIO
+from collections import defaultdict
 try:
     from .version import __version__
 except ImportError:
@@ -41,6 +42,7 @@ class SourcePoint:
         self.category = category
         self.dist_offset = 0
         self.remarks = remarks
+        self.exclusive_group = None
 
     def distance(self, other):
         """Calculate distance in meters."""
@@ -774,7 +776,7 @@ class OsmConflator:
             self.register_match(dist[0][1], osm_point.id)
             osm_kd = osm_kd.remove(osm_point)
             del dist[0]
-            for i in range(len(dist)-1, -1, -1):
+            for i in reversed(range(len(dist))):
                 if dist[i][2] == osm_point:
                     nearest, distance = search_nn_fix(osm_kd, self.dataset[dist[i][1]])
                     if nearest and distance <= max_distance:
@@ -811,8 +813,33 @@ class OsmConflator:
         if count_created > 0:
             logging.info('Created %s audit-overridden dataset points', count_created)
 
+        # Prepare exclusive groups dict
+        exclusive_groups = defaultdict(set)
+        for p, v in self.dataset.items():
+            if v.exclusive_group is not None:
+                exclusive_groups[v.exclusive_group].add(p)
+
         # Then find matches for unmatched dataset points
         self.match_dataset_points_smart()
+
+        # Remove unmatched duplicates
+        count_duplicates = 0
+        for ids in exclusive_groups.values():
+            found = False
+            for p in ids:
+                if p not in self.dataset:
+                    found = True
+                    break
+            for p in ids:
+                if p in self.dataset:
+                    if found:
+                        count_duplicates += 1
+                        del self.dataset[p]
+                    else:
+                        # Leave one element when not matched any
+                        found = True
+        if count_duplicates > 0:
+            logging.info('Removed %s unmatched duplicates', count_duplicates)
 
         # Add unmatched dataset points
         logging.info('Adding %s unmatched dataset points', len(self.dataset))
@@ -1054,31 +1081,30 @@ def check_dataset_for_duplicates(profile, dataset, print_all=False):
     diff_tags = [k for k in tags if tags[k] == '---']
     kd = kdtree.create(list(dataset))
     duplicates = set()
+    group = 0
     for d in dataset:
         if d.id in duplicates:
             continue
+        group += 1
         for alt, _ in kd.search_knn(d, 3):  # The first one will be equal to d
-            if alt.data.id != d.id and alt.data.distance(d) < max_distance:
+            dist = alt.data.distance(d)
+            if alt.data.id != d.id and dist < max_distance:
                 tags_differ = 0
-                if alt.data.distance(d) > uncond_distance:
+                if dist > uncond_distance:
                     for k in diff_tags:
                         if alt.data.tags.get(k) != d.tags.get(k):
                             tags_differ += 1
-                if tags_differ <= len(diff_tags) / 2:
+                if tags_differ <= max(1, len(diff_tags) / 3):
                     duplicates.add(alt.data.id)
+                    d.exclusive_group = group
+                    alt.data.exclusive_group = group
                     if print_all or len(duplicates) <= 5:
                         is_duplicate = tags_differ <= 1
                         logging.error('Dataset points %s: %s and %s',
                                       'duplicate each other' if is_duplicate else 'are too similar',
                                       d.id, alt.data.id)
     if duplicates:
-        remove = profile.get('remove_duplicates', True)
-        if remove:
-            for i in reversed(range(len(dataset))):
-                if dataset[i].id in duplicates:
-                    del dataset[i]
-        logging.error('%s %s duplicates from the dataset',
-                      'Removed' if remove else 'Found', len(duplicates))
+        logging.error('Found %s duplicates in the dataset', len(duplicates))
     if found_duplicate_ids:
         raise KeyError('Cannot continue with duplicate ids')
 
