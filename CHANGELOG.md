@@ -2,6 +2,14 @@
 
 ## master branch
 
+## 1.3.2
+
+_Released 2018-04-19_
+
+* Fixed bug in categories building.
+* Fixed threshold for tags in duplicates check.
+* Now the script prints "Done" when finished, to better measure time.
+
 ## 1.3.1
 
 _Released 2018-03-20_

@@ -247,8 +247,15 @@ class OsmConflator:
                 for t in ('node', 'way', 'relation["type"="multipolygon"]'):
                     query += t + tag_str + bbox_str + ';'
         if self.ref is not None:
-            for t in ('node', 'way', 'relation'):
-                query += t + '["' + self.ref + '"];'
+            if not self.profile.get('bounded_update', False):
+                for t in ('node', 'way', 'relation'):
+                    query += t + '["' + self.ref + '"];'
+            else:
+                for bbox in bboxes:
+                    bbox_str = '' if bbox is None else '(' + ','.join(
+                        [str(x) for x in bbox]) + ')'
+                    for t in ('node', 'way', 'relation'):
+                        query += t + '["' + self.ref + '"]' + bbox_str + ';'
         query += '); out meta qt center;'
         return query
 
@@ -368,30 +375,28 @@ class OsmConflator:
         def match_query(tags, query):
             for tag in query:
                 if len(tag) == 1:
-                    if tag[0] in tags:
+                    return tag[0] in tags
+                else:
+                    value = tags.get(tag[0], None)
+                    if tag[1] is None or tag[1] == '':
+                        return value is None
+                    if value is None:
                         return False
-                    elif tag[1] is None or tag[1] == '':
-                        if tag[0] not in tags:
-                            return False
-                    else:
-                        value = tags.get(tag[0], None)
-                        if value is None:
-                            return False
-                        found = False
-                        for t2 in tag[1:]:
-                            if t2[0] == '~':
-                                m = re.search(t2[1:], value)
-                                if not m:
-                                    return False
-                            elif t2[0] == '!':
-                                if t2[1:].lower() in value.lower():
-                                    found = True
-                            elif t2 == value:
+                    found = False
+                    for t2 in tag[1:]:
+                        if t2[0] == '~':
+                            m = re.search(t2[1:], value)
+                            if not m:
+                                return False
+                        elif t2[0] == '!':
+                            if t2[1:].lower() in value.lower():
                                 found = True
-                            if found:
-                                break
-                        if not found:
-                            return False
+                        elif t2 == value:
+                            found = True
+                        if found:
+                            break
+                    if not found:
+                        return False
             return True
 
         def tags_to_query(tags):
@@ -1094,7 +1099,7 @@ def check_dataset_for_duplicates(profile, dataset, print_all=False):
                     for k in diff_tags:
                         if alt.data.tags.get(k) != d.tags.get(k):
                             tags_differ += 1
-                if tags_differ <= max(1, len(diff_tags) / 3):
+                if tags_differ <= len(diff_tags) / 3:
                     duplicates.add(alt.data.id)
                     d.exclusive_group = group
                     alt.data.exclusive_group = group
@@ -1254,6 +1259,8 @@ def run(profile=None):
             check_moveability(conflator.changes)
         fc = {'type': 'FeatureCollection', 'features': conflator.changes}
         json.dump(fc, options.changes, ensure_ascii=False, sort_keys=True, indent=1)
+
+    logging.info('Done')
 
 
 if __name__ == '__main__':
