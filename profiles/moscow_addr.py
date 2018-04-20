@@ -3,7 +3,7 @@ import logging
 
 source = 'dit.mos.ru'
 no_dataset_id = True
-query = [[('addr:housenumber',)], [('building',)]]
+query = [('building',)]
 max_distance = 50
 max_request_boxes = 2
 master_tags = ('addr:housenumber', 'addr:street')
@@ -30,6 +30,8 @@ if param:
         param = param[1:]
     if param in ADMS:
         ADM = ADMS[param]
+    if param == '5':
+        query = [[('addr:housenumber',)], [('building',)]]
 
 
 def dataset(fileobj):
@@ -62,6 +64,7 @@ def dataset(fileobj):
         return None
 
     global COMPLEX, ADM
+    logging.info('Экспортируем %s (%s)', ADM, 'строения' if COMPLEX else 'без строений')
     import zipfile
     zf = zipfile.ZipFile(fileobj)
     data = []
@@ -87,7 +90,7 @@ def dataset(fileobj):
                 ctype = el.get('L2_TYPE')
                 stroenie = el.get('L3_VALUE')
                 stype = el.get('L3_TYPE')
-                if not street or not house:
+                if not street or not house or 'Б/Н' in house:
                     no_addr += 1
                     continue
                 if not lonlat:
