@@ -2,6 +2,9 @@
 
 ## master branch
 
+* Fixed processing of `''` tag value.
+* More that 3 duplicate points in a single place are processed correctly.
+
 ## 1.3.2
 
 _Released 2018-04-19_

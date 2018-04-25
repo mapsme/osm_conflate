@@ -78,6 +78,7 @@ class OSMPoint(SourcePoint):
     The id is compound and created from object type and object id."""
     def __init__(self, ptype, pid, version, lat, lon, tags=None, categories=None):
         super().__init__('{}{}'.format(ptype[0], pid), lat, lon, tags)
+        self.tags = {k: v for k, v in self.tags.items() if v is not None and len(v) > 0}
         self.osm_type = ptype
         self.osm_id = pid
         self.version = version
@@ -598,7 +599,7 @@ class OsmConflator:
                                 continue
                             tags[osm_key] = v
                             changed = True
-                        elif osm_key in p.tags and (v == '' or retagging):
+                        elif osm_key in tags and (v == '' or retagging):
                             del tags[osm_key]
                             changed = True
             return changed
@@ -1082,7 +1083,7 @@ def check_dataset_for_duplicates(profile, dataset, print_all=False):
 
     # And then for near-duplicate points with similar tags
     max_distance = profile.get('max_distance', MAX_DISTANCE)
-    uncond_distance = profile.get('duplicate_distance', 0)
+    uncond_distance = profile.get('duplicate_distance', 1)
     diff_tags = [k for k in tags if tags[k] == '---']
     kd = kdtree.create(list(dataset))
     duplicates = set()
@@ -1091,9 +1092,12 @@ def check_dataset_for_duplicates(profile, dataset, print_all=False):
         if d.id in duplicates:
             continue
         group += 1
-        for alt, _ in kd.search_knn(d, 3):  # The first one will be equal to d
+        dups = kd.search_knn(d, 2)  # The first one will be equal to d
+        if len(dups) < 2 or dups[1][0].data.distance(d) > max_distance:
+            continue
+        for alt, _ in kd.search_knn(d, 20):
             dist = alt.data.distance(d)
-            if alt.data.id != d.id and dist < max_distance:
+            if alt.data.id != d.id and dist <= max_distance:
                 tags_differ = 0
                 if dist > uncond_distance:
                     for k in diff_tags:
