@@ -975,9 +975,9 @@ def read_dataset(profile, fileobj):
             return data
         except Exception:
             logging.error('Failed to parse the source as a JSON')
-    return profile.get(
+    return list(profile.get(
         'dataset', args=(fileobj,),
-        required='returns a list of SourcePoints with the dataset')
+        required='returns a list of SourcePoints with the dataset'))
 
 
 def add_categories_to_dataset(profile, dataset):
