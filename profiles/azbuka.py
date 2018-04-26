@@ -13,6 +13,7 @@ class Profile:
     query = [('shop', 'convenience', 'supermarket', 'wine', 'alcohol')]
     master_tags = ('operator', 'shop', 'opening_hours', 'name', 'contact:website', 'contact:phone')
     download_url = 'https://av.ru/yandex/supermarket.xml'
+    bounded_update = True
 
     def matches(osmtags, avtags):
         if 'Энотека' in avtags['name']:

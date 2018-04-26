@@ -5,6 +5,7 @@
 * Fixed processing of `''` tag value.
 * More that 3 duplicate points in a single place are processed correctly.
 * Now you can `yield` points from a profile instead of making a list.
+* Not marking nodes with `move` in the audit file as modified, unless we move them.
 
 ## 1.3.2
 

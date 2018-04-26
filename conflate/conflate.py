@@ -688,8 +688,10 @@ class OsmConflator:
                     p.tags['source'] = self.source
             if self.ref is not None:
                 p.tags[self.ref] = sp.id
-            if 'fixme' in audit and audit['fixme']:
+            if 'fixme' in audit and audit['fixme'] != p.tags.get('fixme'):
                 p.tags['fixme'] = audit['fixme']
+                if p.action is None:
+                    p.action = 'modify'
             if 'move' in audit and not p.is_area():
                 if p0 and audit['move'] == 'osm':
                     p.lat = p0.lat
@@ -700,7 +702,7 @@ class OsmConflator:
                 elif len(audit['move']) == 2:
                     p.lat = audit['move'][1]
                     p.lon = audit['move'][0]
-                if p.action is None:
+                if p.action is None and p0.distance(p) > 0.1:
                     p.action = 'modify'
         elif keep or p.is_area():
             if update_tags(p.tags, retag, retagging=True, audit=audit):
