@@ -2,6 +2,10 @@
 
 ## master branch
 
+## 1.3.3
+
+_Released 2018-04-26_
+
 * Fixed processing of `''` tag value.
 * More that 3 duplicate points in a single place are processed correctly.
 * Now you can `yield` points from a profile instead of making a list.
