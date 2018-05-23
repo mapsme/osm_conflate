@@ -8,6 +8,7 @@ import math
 import requests
 import re
 import os
+import struct
 import sys
 from io import BytesIO
 from collections import defaultdict
@@ -42,6 +43,7 @@ class SourcePoint:
         self.category = category
         self.dist_offset = 0
         self.remarks = remarks
+        self.region = None
         self.exclusive_group = None
 
     def distance(self, other):
@@ -1120,6 +1122,100 @@ def check_dataset_for_duplicates(profile, dataset, print_all=False):
         raise KeyError('Cannot continue with duplicate ids')
 
 
+def init_geocoder():
+    class PlacePoint:
+        def __init__(self, lon, lat, country, region):
+            self.coord = (lon, lat)
+            self.country = country
+            self.region = region
+
+        def __len__(self):
+            return len(self.coord)
+
+        def __getitem__(self, i):
+            return self.coord[i]
+
+    filename = os.path.join(os.getcwd(), os.path.dirname(__file__), 'places.bin')
+    if not os.path.exists(filename):
+        return None
+    places = []
+    with open(filename, 'rb') as f:
+        countries = []
+        cnt = struct.unpack('B', f.read(1))[0]
+        for i in range(cnt):
+            countries.append(struct.unpack('2s', f.read(2))[0].decode('ascii'))
+        regions = []
+        cnt = struct.unpack('h', f.read(2))[0]
+        for i in range(cnt):
+            l = struct.unpack('B', f.read(1))[0]
+            regions.append(f.read(l).decode('ascii'))
+        dlon = f.read(3)
+        while len(dlon) == 3:
+            dlat = f.read(3)
+            country = struct.unpack('B', f.read(1))[0]
+            region = struct.unpack('h', f.read(2))[0]
+            places.append(PlacePoint(struct.unpack('<l', dlon + b'\0')[0] / 10000,
+                                     struct.unpack('<l', dlat + b'\0')[0] / 10000,
+                                     countries[country], regions[region]))
+    if not places:
+        return None
+    return kdtree.create(places)
+
+
+def add_regions(profile, dataset, opt_regions):
+    regions = profile.get_raw('regions')
+    if not regions:
+        return
+
+    logging.info('Geocoding regions')
+    if not callable(regions):
+        if regions is True or regions == 4:
+            regions = 'all'
+        elif regions is False or regions == 2:
+            regions = []
+        if isinstance(regions, str):
+            regions = regions.lower()
+            if regions[:3] == 'reg' or '4' in regions:
+                regions = 'all'
+            elif regions[:3] == 'cou' or '2' in regions:
+                regions = []
+            elif regions == 'some':
+                regions = ['US', 'RU']
+        if isinstance(regions, list):
+            for i in regions:
+                regions[i] = regions[i].upper()
+
+    # Finally, geocode
+    places = init_geocoder()
+    if not places:
+        if callable(regions):
+            logging.warn('Could not find the geocoding file')
+            for d in dataset:
+                d.region = regions(d)
+        else:
+            logging.error('Could not find the geocoding file, no regions were added')
+        return
+
+    for d in dataset:
+        reg, _ = places.search_nn((d.lon, d.lat))
+        if callable(regions):
+            d.region = regions(d, reg.data.region)
+        elif regions == 'all' or reg.data.country in regions:
+            d.region = reg.data.region
+        else:
+            d.region = reg.data.country
+
+    # Filter regions
+    if opt_regions:
+        negate = opt_regions[0] in ('-', '^')
+        if negate:
+            opt_regions = opt_regions[1:]
+        filtr = set([r.strip().upper() for r in opt_regions.split(',')])
+        for i in reversed(range(len(dataset))):
+            if negate != (dataset[i].region not in filtr):
+                del dataset[i]
+
+
 def write_for_filter(profile, dataset, f):
     def query_to_tag_strings(query):
         if isinstance(query, str):
@@ -1199,6 +1295,8 @@ def run(profile=None):
                         help='Prepare a file for the filtering script')
     parser.add_argument('-d', '--list_duplicates', action='store_true',
                         help='List all duplicate points in the dataset')
+    parser.add_argument('-r', '--regions',
+                        help='Conflate only points with regions in this comma-separated list')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Display debug messages')
     parser.add_argument('-q', '--quiet', action='store_true',
@@ -1232,6 +1330,7 @@ def run(profile=None):
     transform_dataset(profile, dataset)
     add_categories_to_dataset(profile, dataset)
     check_dataset_for_duplicates(profile, dataset, options.list_duplicates)
+    add_regions(profile, dataset, options.regions)
     logging.info('Read %s items from the dataset', len(dataset))
 
     if options.for_filter:

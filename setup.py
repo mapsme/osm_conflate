@@ -10,6 +10,7 @@ setup(
     author='Ilya Zverev',
     author_email='ilya@zverev.info',
     packages=['conflate'],
+    package_data={'conflate': ['places.bin']},
     install_requires=[
         'kdtree',
         'requests',
