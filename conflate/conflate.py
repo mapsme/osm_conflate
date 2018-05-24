@@ -458,7 +458,7 @@ class OsmConflator:
             return new_box
 
         # height, width, lats, lons
-        max_bboxes = self.profile.get('max_request_boxes', 8)
+        max_bboxes = self.profile.get('max_request_boxes', 4)
         boxes = [[lats[-1][0]-lats[0][0], lons[-1][0]-lons[0][0], lats, lons]]
         initial_area = boxes[0][0] * boxes[0][1]
         while len(boxes) < max_bboxes and len(boxes) <= len(self.dataset):
