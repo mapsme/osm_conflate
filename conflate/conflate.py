@@ -22,7 +22,7 @@ except ImportError:
     import xml.etree.ElementTree as etree
 
 TITLE = 'OSM Conflator ' + __version__
-OVERPASS_SERVER = 'http://overpass-api.de/api/'
+OVERPASS_SERVER = 'https://overpass-api.de/api/'
 OSM_API_SERVER = 'https://api.openstreetmap.org/api/0.6/'
 BBOX_PADDING = 0.003  # in degrees, ~330 m default
 MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
@@ -189,6 +189,121 @@ class Profile:
         return default
 
 
+class Geocoder:
+    def __init__(self, profile, opt_regions=None):
+        profile_regions = profile.get_raw('regions')
+        self.enabled = bool(profile_regions)
+        if self.enabled:
+            logging.info('Initializing geocoder (this will take a minute)')
+            self.regions = self.parse_regions(profile_regions)
+            self.tree = self.load_places_tree()
+            if not self.tree:
+                if callable(profile_regions):
+                    logging.warn('Could not read the geocoding file')
+                else:
+                    logging.error('Could not read the geocoding file, no regions will be added')
+                    self.enabled = False
+        if opt_regions:
+            self.f_negate = opt_regions[0] in ('-', '^')
+            if self.f_negate:
+                opt_regions = opt_regions[1:]
+            self.filter = set([r.strip().upper() for r in opt_regions.split(',')])
+        else:
+            self.filter = None
+
+    def load_places_tree(self):
+        class PlacePoint:
+            def __init__(self, lon, lat, country, region):
+                self.coord = (lon, lat)
+                self.country = country
+                self.region = region
+
+            def __len__(self):
+                return len(self.coord)
+
+            def __getitem__(self, i):
+                return self.coord[i]
+
+        filename = os.path.join(os.getcwd(), os.path.dirname(__file__), 'places.bin')
+        if not os.path.exists(filename):
+            return None
+        places = []
+        with open(filename, 'rb') as f:
+            countries = []
+            cnt = struct.unpack('B', f.read(1))[0]
+            for i in range(cnt):
+                countries.append(struct.unpack('2s', f.read(2))[0].decode('ascii'))
+            regions = []
+            cnt = struct.unpack('<h', f.read(2))[0]
+            for i in range(cnt):
+                l = struct.unpack('B', f.read(1))[0]
+                regions.append(f.read(l).decode('ascii'))
+            dlon = f.read(3)
+            while len(dlon) == 3:
+                dlat = f.read(3)
+                country = struct.unpack('B', f.read(1))[0]
+                region = struct.unpack('<h', f.read(2))[0]
+                try:
+                    places.append(PlacePoint(struct.unpack('<l', dlon + b'\0')[0] / 10000,
+                                             struct.unpack('<l', dlat + b'\0')[0] / 10000,
+                                             countries[country], regions[region]))
+                except IndexError:
+                    logging.error(
+                        'At %#x, got countries[%s], have %s; got regions[%s], have %s',
+                        f.tell(), country, len(countries), region, len(regions))
+                    raise
+                dlon = f.read(3)
+        if not places:
+            return None
+        return kdtree.create(places)
+
+    def parse_regions(self, profile_regions):
+        if not profile_regions or callable(profile_regions):
+            return profile_regions
+        regions = profile_regions
+        if regions is True or regions == 4:
+            regions = 'all'
+        elif regions is False or regions == 2:
+            regions = []
+        if isinstance(regions, str):
+            regions = regions.lower()
+            if regions[:3] == 'reg' or '4' in regions:
+                regions = 'all'
+            elif regions[:3] == 'cou' or '2' in regions:
+                regions = []
+            elif regions == 'some':
+                regions = ['US', 'RU']
+        if isinstance(regions, set):
+            regions = list(regions)
+        if isinstance(regions, dict):
+            regions = list(regions.keys())
+        if isinstance(regions, list):
+            for i in regions:
+                regions[i] = regions[i].upper()
+            regions = set(regions)
+        return regions
+
+    def find(self, pt):
+        """Returns a tuple of (region, present). A point should be skipped if not present."""
+        if not self.enabled:
+            return None, True
+
+        region = None
+        if not self.tree:
+            if callable(self.regions):
+                region = self.regions(pt)
+        else:
+            reg, _ = self.tree.search_nn((pt.lon, pt.lat))
+            if callable(self.regions):
+                region = self.regions(pt, reg.data.region)
+            elif self.regions == 'all' or reg.data.country in self.regions:
+                region = reg.data.region
+            else:
+                region = reg.data.country
+
+        return region, not self.filter or (self.negate != (region not in self.filter))
+
+
 class OsmConflator:
     """The main class for the conflator.
 
@@ -203,6 +318,7 @@ class OsmConflator:
         self.matched = []
         self.changes = []
         self.profile = profile
+        self.geocoder = None
         self.source = self.profile.get(
             'source', required='value of "source" tag for uploaded OSM objects')
         self.add_source_tag = self.profile.get('add_source', False)
@@ -659,6 +775,13 @@ class OsmConflator:
             props['marker-color'] = MARKER_COLORS[marker_action]
             if ref and ref.remarks:
                 props['remarks'] = ref.remarks
+            if ref and ref.region:
+                props['region'] = ref.region
+            elif self.geocoder:
+                region, present = self.geocoder.find(after)
+                if not present:
+                    return None
+                props['region'] = region
             return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
@@ -713,8 +836,10 @@ class OsmConflator:
             p.action = 'delete'
 
         if p.action is not None:
-            self.matched.append(p)
-            self.changes.append(format_change(p0, p, sp))
+            change = format_change(p0, p, sp)
+            if change is not None:
+                self.matched.append(p)
+                self.changes.append(change)
 
     def match_dataset_points_smart(self):
         """Smart matching for dataset <-> OSM points.
@@ -1122,98 +1247,20 @@ def check_dataset_for_duplicates(profile, dataset, print_all=False):
         raise KeyError('Cannot continue with duplicate ids')
 
 
-def init_geocoder():
-    class PlacePoint:
-        def __init__(self, lon, lat, country, region):
-            self.coord = (lon, lat)
-            self.country = country
-            self.region = region
-
-        def __len__(self):
-            return len(self.coord)
-
-        def __getitem__(self, i):
-            return self.coord[i]
-
-    filename = os.path.join(os.getcwd(), os.path.dirname(__file__), 'places.bin')
-    if not os.path.exists(filename):
-        return None
-    places = []
-    with open(filename, 'rb') as f:
-        countries = []
-        cnt = struct.unpack('B', f.read(1))[0]
-        for i in range(cnt):
-            countries.append(struct.unpack('2s', f.read(2))[0].decode('ascii'))
-        regions = []
-        cnt = struct.unpack('h', f.read(2))[0]
-        for i in range(cnt):
-            l = struct.unpack('B', f.read(1))[0]
-            regions.append(f.read(l).decode('ascii'))
-        dlon = f.read(3)
-        while len(dlon) == 3:
-            dlat = f.read(3)
-            country = struct.unpack('B', f.read(1))[0]
-            region = struct.unpack('h', f.read(2))[0]
-            places.append(PlacePoint(struct.unpack('<l', dlon + b'\0')[0] / 10000,
-                                     struct.unpack('<l', dlat + b'\0')[0] / 10000,
-                                     countries[country], regions[region]))
-    if not places:
-        return None
-    return kdtree.create(places)
-
-
-def add_regions(profile, dataset, opt_regions):
-    regions = profile.get_raw('regions')
-    if not regions:
+def add_regions(dataset, geocoder):
+    if not geocoder.enabled:
         return
 
-    logging.info('Geocoding regions')
-    if not callable(regions):
-        if regions is True or regions == 4:
-            regions = 'all'
-        elif regions is False or regions == 2:
-            regions = []
-        if isinstance(regions, str):
-            regions = regions.lower()
-            if regions[:3] == 'reg' or '4' in regions:
-                regions = 'all'
-            elif regions[:3] == 'cou' or '2' in regions:
-                regions = []
-            elif regions == 'some':
-                regions = ['US', 'RU']
-        if isinstance(regions, list):
-            for i in regions:
-                regions[i] = regions[i].upper()
-
-    # Finally, geocode
-    places = init_geocoder()
-    if not places:
-        if callable(regions):
-            logging.warn('Could not find the geocoding file')
-            for d in dataset:
-                d.region = regions(d)
+    if geocoder.filter:
+        logging.info('Geocoding and filtering points')
+    else:
+        logging.info('Geocoding points')
+    for i in reversed(range(len(dataset))):
+        region, present = geocoder.find(dataset[i])
+        if not present:
+            del dataset[i]
         else:
-            logging.error('Could not find the geocoding file, no regions were added')
-        return
-
-    for d in dataset:
-        reg, _ = places.search_nn((d.lon, d.lat))
-        if callable(regions):
-            d.region = regions(d, reg.data.region)
-        elif regions == 'all' or reg.data.country in regions:
-            d.region = reg.data.region
-        else:
-            d.region = reg.data.country
-
-    # Filter regions
-    if opt_regions:
-        negate = opt_regions[0] in ('-', '^')
-        if negate:
-            opt_regions = opt_regions[1:]
-        filtr = set([r.strip().upper() for r in opt_regions.split(',')])
-        for i in reversed(range(len(dataset))):
-            if negate != (dataset[i].region not in filtr):
-                del dataset[i]
+            dataset[i].region = region
 
 
 def write_for_filter(profile, dataset, f):
@@ -1322,6 +1369,7 @@ def run(profile=None):
     global param
     param = options.param
     profile = Profile(profile or options.profile)
+    geocoder = Geocoder(profile, options.regions)
 
     dataset = read_dataset(profile, options.source)
     if not dataset:
@@ -1330,7 +1378,7 @@ def run(profile=None):
     transform_dataset(profile, dataset)
     add_categories_to_dataset(profile, dataset)
     check_dataset_for_duplicates(profile, dataset, options.list_duplicates)
-    add_regions(profile, dataset, options.regions)
+    add_regions(dataset, geocoder)
     logging.info('Read %s items from the dataset', len(dataset))
 
     if options.for_filter:
@@ -1343,6 +1391,7 @@ def run(profile=None):
         audit = json.load(options.audit)
 
     conflator = OsmConflator(profile, dataset, audit)
+    conflator.geocoder = geocoder
     if options.osm and os.path.exists(options.osm):
         with open(options.osm, 'r') as f:
             conflator.parse_osm(f)
