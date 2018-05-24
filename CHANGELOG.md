@@ -2,6 +2,10 @@
 
 ## master branch
 
+* Added a simple kd-tree based geocoder for countries and regions. Controlled by the `regions` parameter in a profile.
+* Using the new `nwr` query type of Overpass API.
+* Reduced default `max_request_boxes` to four.
+
 ## 1.3.3
 
 _Released 2018-04-26_

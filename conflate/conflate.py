@@ -363,18 +363,15 @@ class OsmConflator:
         for bbox in bboxes:
             bbox_str = '' if bbox is None else '(' + ','.join([str(x) for x in bbox]) + ')'
             for tag_str in tag_strs:
-                for t in ('node', 'way', 'relation["type"="multipolygon"]'):
-                    query += t + tag_str + bbox_str + ';'
+                query += 'nwr' + tag_str + bbox_str + ';'
         if self.ref is not None:
             if not self.profile.get('bounded_update', False):
-                for t in ('node', 'way', 'relation'):
-                    query += t + '["' + self.ref + '"];'
+                query += 'nwr["' + self.ref + '"];'
             else:
                 for bbox in bboxes:
                     bbox_str = '' if bbox is None else '(' + ','.join(
                         [str(x) for x in bbox]) + ')'
-                    for t in ('node', 'way', 'relation'):
-                        query += t + '["' + self.ref + '"]' + bbox_str + ';'
+                    query += 'nwr["' + self.ref + '"]' + bbox_str + ';'
         query += '); out meta qt center;'
         return query
 
@@ -479,7 +476,7 @@ class OsmConflator:
             if area * 100 < initial_area:
                 # Stop splitting when the area decrease is less than 1%
                 break
-            logging.debug('Splitting bbox %s at %s %s-%s; area decrease %s%%',
+            logging.debug('Splitting bbox %s at %s %s..%s; area decrease %s%%',
                           get_bbox(candidate_box),
                           'longs' if point_array == 3 else 'lats',
                           candidate_box[point_array][point_id][0],
