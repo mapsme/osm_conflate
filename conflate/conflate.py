@@ -837,6 +837,8 @@ class OsmConflator:
                     p.action = 'modify'
             if p.action != 'create':
                 self.matches.append([sp.id, p.osm_type, p.osm_id, p.lat, p.lon, p.action])
+            else:
+                self.matches.append([sp.id, '', '', p.lat, p.lon, p.action])
         elif keep or p.is_area():
             if update_tags(p.tags, retag, retagging=True, audit=audit):
                 p.action = 'modify'
