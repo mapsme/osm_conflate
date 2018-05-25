@@ -757,7 +757,7 @@ class OsmConflator:
                     for k, v in ref.tags.items():
                         osm_key = get_osm_key(k, after.tags)
                         if osm_key not in after.tags or after.tags[osm_key] != v:
-                            props['ref_unused_tags.{}'.format(k)] = v
+                            props['ref_unused_tags.{}'.format(osm_key)] = v
                 # Now compare old and new OSM tags
                 for k in set(after.tags.keys()).union(set(before.tags.keys())):
                     v0 = before.tags.get(k, None)
@@ -775,7 +775,7 @@ class OsmConflator:
                 props['remarks'] = ref.remarks
             if ref and ref.region:
                 props['region'] = ref.region
-            elif self.geocoder:
+            elif self.geocoder and self.geocoder.enabled:
                 region, present = self.geocoder.find(after)
                 if not present:
                     return None
