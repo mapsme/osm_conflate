@@ -573,8 +573,14 @@ class OsmConflator:
             else:
                 logging.error('Error message: %s', r.text)
             raise IOError()
-        if 'runtime error: Query timed out' in r.text:
-            logging.error('Query timed out, try increasing the "overpass_timeout" profile variable')
+        if 'runtime error: ' in r.text:
+            m = re.search(r'runtime error: ([^<]+)', r.text)
+            error = 'unknown' if not m else m.group(1)
+            if 'Query timed out' in error:
+                logging.error(
+                    'Query timed out, try increasing the "overpass_timeout" profile variable')
+            else:
+                logging.error('Runtime error: %s', error)
             raise IOError()
         self.parse_osm(r.content)
 
