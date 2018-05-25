@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import codecs
+import csv
 import json
 import kdtree
 import logging
@@ -318,6 +319,7 @@ class OsmConflator:
         self.osmdata = {}
         self.matched = []
         self.changes = []
+        self.matches = []
         self.profile = profile
         self.geocoder = None
         self.source = self.profile.get(
@@ -833,6 +835,8 @@ class OsmConflator:
                     p.lon = audit['move'][0]
                 if p.action is None and p0.distance(p) > 0.1:
                     p.action = 'modify'
+            if p.action != 'create':
+                self.matches.append([sp.id, p.osm_type, p.osm_id, p.lat, p.lon, p.action])
         elif keep or p.is_area():
             if update_tags(p.tags, retag, retagging=True, audit=audit):
                 p.action = 'modify'
@@ -1344,6 +1348,8 @@ def run(profile=None):
                         help='Check for moveability of modified modes')
     parser.add_argument('-f', '--for-filter', type=argparse.FileType('w'),
                         help='Prepare a file for the filtering script')
+    parser.add_argument('--match', '--matches', type=argparse.FileType('w'),
+                        help='Print a CSV list of matches')
     parser.add_argument('-d', '--list_duplicates', action='store_true',
                         help='List all duplicate points in the dataset')
     parser.add_argument('-r', '--regions',
@@ -1356,7 +1362,8 @@ def run(profile=None):
                         help='Do not display informational messages')
     options = parser.parse_args()
 
-    if not options.output and not options.changes and not options.for_filter:
+    if (not options.output and not options.changes and
+            not options.for_filter and not options.match):
         parser.print_help()
         return
 
@@ -1423,6 +1430,12 @@ def run(profile=None):
             check_moveability(conflator.changes)
         fc = {'type': 'FeatureCollection', 'features': conflator.changes}
         json.dump(fc, options.changes, ensure_ascii=False, sort_keys=True, indent=1)
+
+    if options.match:
+        writer = csv.writer(options.match)
+        writer.writerow(['ref', 'osm_type', 'osm_id', 'lat', 'lon', 'action'])
+        for row in conflator.matches:
+            writer.writerow(row)
 
     logging.info('Done')
 

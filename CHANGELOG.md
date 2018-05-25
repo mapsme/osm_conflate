@@ -7,6 +7,7 @@
 * Reduced default `max_request_boxes` to four.
 * New argument `--alt-overpass` to use Kumi Systems' server (since the main one is blocked in Russia).
 * Better handling of server runtime errors.
+* Find matches in OSM with `--match <result.csv>`.
 
 ## 1.3.3
 
