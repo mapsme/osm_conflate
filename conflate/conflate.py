@@ -23,6 +23,7 @@ except ImportError:
 
 TITLE = 'OSM Conflator ' + __version__
 OVERPASS_SERVER = 'https://overpass-api.de/api/'
+ALT_OVERPASS_SERVER = 'https://overpass.kumi.systems/api/'
 OSM_API_SERVER = 'https://api.openstreetmap.org/api/0.6/'
 BBOX_PADDING = 0.003  # in degrees, ~330 m default
 MAX_DISTANCE = 100  # how far can object be to be considered a match, in meters
@@ -1341,6 +1342,8 @@ def run(profile=None):
                         help='List all duplicate points in the dataset')
     parser.add_argument('-r', '--regions',
                         help='Conflate only points with regions in this comma-separated list')
+    parser.add_argument('--alt-overpass', action='store_true',
+                        help='Use an alternate Overpass API server')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Display debug messages')
     parser.add_argument('-q', '--quiet', action='store_true',
@@ -1386,6 +1389,10 @@ def run(profile=None):
     audit = None
     if options.audit:
         audit = json.load(options.audit)
+
+    if options.alt_overpass:
+        global OVERPASS_SERVER
+        OVERPASS_SERVER = ALT_OVERPASS_SERVER
 
     conflator = OsmConflator(profile, dataset, audit)
     conflator.geocoder = geocoder

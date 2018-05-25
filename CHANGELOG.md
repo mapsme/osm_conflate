@@ -1,10 +1,11 @@
 # OSM Conflator Change Log
 
-## master branch
+## master branch (1.4.0)
 
 * Added a simple kd-tree based geocoder for countries and regions. Controlled by the `regions` parameter in a profile.
 * Using the new `nwr` query type of Overpass API.
 * Reduced default `max_request_boxes` to four.
+* New argument `--alt-overpass` to use Kumi Systems' server (since the main one is blocked in Russia).
 
 ## 1.3.3
 
