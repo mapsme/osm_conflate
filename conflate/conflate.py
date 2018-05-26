@@ -1350,7 +1350,7 @@ def run(profile=None):
                         help='Check for moveability of modified modes')
     parser.add_argument('-f', '--for-filter', type=argparse.FileType('w'),
                         help='Prepare a file for the filtering script')
-    parser.add_argument('--match', '--matches', type=argparse.FileType('w'),
+    parser.add_argument('-l', '--list', type=argparse.FileType('w'),
                         help='Print a CSV list of matches')
     parser.add_argument('-d', '--list_duplicates', action='store_true',
                         help='List all duplicate points in the dataset')
@@ -1365,7 +1365,7 @@ def run(profile=None):
     options = parser.parse_args()
 
     if (not options.output and not options.changes and
-            not options.for_filter and not options.match):
+            not options.for_filter and not options.list):
         parser.print_help()
         return
 
@@ -1433,8 +1433,8 @@ def run(profile=None):
         fc = {'type': 'FeatureCollection', 'features': conflator.changes}
         json.dump(fc, options.changes, ensure_ascii=False, sort_keys=True, indent=1)
 
-    if options.match:
-        writer = csv.writer(options.match)
+    if options.list:
+        writer = csv.writer(options.list)
         writer.writerow(['ref', 'osm_type', 'osm_id', 'lat', 'lon', 'action'])
         for row in conflator.matches:
             writer.writerow(row)
