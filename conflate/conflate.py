@@ -943,6 +943,7 @@ class OsmConflator:
             # First match all objects with ref:whatever tag set
             count_ref = 0
             for k, p in list(self.osmdata.items()):
+                ref = None
                 if self.ref and self.ref in p.tags:
                     ref = p.tags[self.ref]
                 elif find_ref:
