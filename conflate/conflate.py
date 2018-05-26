@@ -192,8 +192,9 @@ class Profile:
 
 
 class Geocoder:
-    def __init__(self, profile, opt_regions=None):
+    def __init__(self, profile):
         profile_regions = profile.get_raw('regions')
+        self.filter = None
         self.enabled = bool(profile_regions)
         if self.enabled:
             logging.info('Initializing geocoder (this will take a minute)')
@@ -205,13 +206,16 @@ class Geocoder:
                 else:
                     logging.error('Could not read the geocoding file, no regions will be added')
                     self.enabled = False
-        if opt_regions:
+
+    def set_filter(self, opt_regions):
+        if isinstance(opt_regions, str):
             self.f_negate = opt_regions[0] in ('-', '^')
             if self.f_negate:
                 opt_regions = opt_regions[1:]
-            self.filter = set([r.strip().upper() for r in opt_regions.split(',')])
-        else:
-            self.filter = None
+            self.filter = set([r.strip() for r in opt_regions.split(',')])
+        elif isinstance(opt_regions, list):
+            self.f_negate = False
+            self.filter = set(opt_regions)
 
     def load_places_tree(self):
         class PlacePoint:
@@ -934,14 +938,19 @@ class OsmConflator:
     def match(self):
         """Matches each osm object with a SourcePoint, or marks it as obsolete.
         The resulting list of OSM Points are written to the "matched" field."""
-        if self.ref is not None:
+        find_ref = self.profile.get_raw('find_ref')
+        if self.ref is not None or callable(find_ref):
             # First match all objects with ref:whatever tag set
             count_ref = 0
             for k, p in list(self.osmdata.items()):
-                if self.ref in p.tags:
-                    if p.tags[self.ref] in self.dataset:
+                if self.ref and self.ref in p.tags:
+                    ref = p.tags[self.ref]
+                elif find_ref:
+                    ref = find_ref(p.tags)
+                if ref is not None:
+                    if ref in self.dataset:
                         count_ref += 1
-                        self.register_match(p.tags[self.ref], k)
+                        self.register_match(ref, k)
             logging.info('Updated %s OSM objects with %s tag', count_ref, self.ref)
 
         # Add points for which audit specifically mentioned creating
@@ -997,7 +1006,12 @@ class OsmConflator:
             delete_unmatched = self.profile.get('delete_unmatched', False)
             retag = self.profile.get('tag_unmatched')
             for k, p in list(self.osmdata.items()):
-                if self.ref is not None and self.ref in p.tags:
+                ref = None
+                if self.ref and self.ref in p.tags:
+                    ref = p.tags[self.ref]
+                elif find_ref:
+                    ref = find_ref(p.tags)
+                if ref is not None:
                     # When ref:whatever is present, we can delete that object safely
                     count_deleted += 1
                     self.register_match(None, k, retag=retag)
@@ -1257,6 +1271,8 @@ def check_dataset_for_duplicates(profile, dataset, print_all=False):
 
 
 def add_regions(dataset, geocoder):
+    if not geocoder.enabled:
+        return
     if geocoder.filter:
         logging.info('Geocoding and filtering points')
     else:
@@ -1380,7 +1396,16 @@ def run(profile=None):
     global param
     param = options.param
     profile = Profile(profile or options.profile)
-    geocoder = Geocoder(profile, options.regions)
+
+    audit = None
+    if options.audit:
+        audit = json.load(options.audit)
+
+    geocoder = Geocoder(profile)
+    if options.regions:
+        geocoder.set_filter(options.regions)
+    elif audit and audit.get('regions'):
+        geocoder.set_filter(audit.get('regions'))
 
     dataset = read_dataset(profile, options.source)
     if not dataset:
@@ -1396,10 +1421,6 @@ def run(profile=None):
         if write_for_filter(profile, dataset, options.for_filter):
             logging.info('Prepared data for filtering, exitting')
         return
-
-    audit = None
-    if options.audit:
-        audit = json.load(options.audit)
 
     if options.alt_overpass:
         global OVERPASS_SERVER
