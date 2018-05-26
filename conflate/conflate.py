@@ -863,7 +863,7 @@ class OsmConflator:
         the average case complexity is ~O(n*log^2 n), this is fine.
         """
         def search_nn_fix(kd, point):
-            nearest = kd.search_knn(point, 10)
+            nearest = kd.search_knn(point, self.profile.get('nearest_points', 10))
             if not nearest:
                 return None, None
             match_func = self.profile.get_raw('matches')

@@ -8,6 +8,7 @@
 * New argument `--alt-overpass` to use Kumi Systems' server (since the main one is blocked in Russia).
 * Better handling of server runtime errors.
 * Find matches in OSM with `--list <result.csv>`.
+* Control number of nearest points to check for matches with `nearest_points` profile parameter.
 
 ## 1.3.3
 
