@@ -3,12 +3,14 @@
 ## master branch (1.4.0)
 
 * Added a simple kd-tree based geocoder for countries and regions. Controlled by the `regions` parameter in a profile.
+* You can filter by regions using `-r` argument or `"regions"` list in an audit file.
 * Using the new `nwr` query type of Overpass API.
 * Reduced default `max_request_boxes` to four.
 * New argument `--alt-overpass` to use Kumi Systems' server (since the main one is blocked in Russia).
 * Better handling of server runtime errors.
 * Find matches in OSM with `--list <result.csv>`.
 * Control number of nearest points to check for matches with `nearest_points` profile parameter.
+* When you have dataset ID in an URL or other tag, use `find_ref` profile function to match on it.
 
 ## 1.3.3
 
