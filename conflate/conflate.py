@@ -36,7 +36,7 @@ LIFECYCLE_PREFIXES = ('proposed', 'construction', 'disused', 'abandoned', 'was',
 class SourcePoint:
     """A common class for points. Has an id, latitude and longitude,
     and a dict of tags. Remarks are optional for reviewers hints only."""
-    def __init__(self, pid, lat, lon, tags=None, category=None, remarks=None):
+    def __init__(self, pid, lat, lon, tags=None, category=None, remarks=None, region=None):
         self.id = str(pid)
         self.lat = lat
         self.lon = lon
@@ -45,7 +45,7 @@ class SourcePoint:
         self.category = category
         self.dist_offset = 0
         self.remarks = remarks
-        self.region = None
+        self.region = region
         self.exclusive_group = None
 
     def distance(self, other):
@@ -287,21 +287,19 @@ class Geocoder:
 
     def find(self, pt):
         """Returns a tuple of (region, present). A point should be skipped if not present."""
-        if not self.enabled:
-            return None, True
-
-        region = None
-        if not self.tree:
-            if callable(self.regions):
-                region = self.regions(pt)
-        else:
-            reg, _ = self.tree.search_nn((pt.lon, pt.lat))
-            if callable(self.regions):
-                region = self.regions(pt, reg.data.region)
-            elif self.regions == 'all' or reg.data.country in self.regions:
-                region = reg.data.region
-            else:
-                region = reg.data.country
+        region = pt.region
+        if self.enabled:
+            if not self.tree:
+                if callable(self.regions):
+                    region = self.regions(pt, region)
+            elif region is None:
+                reg, _ = self.tree.search_nn((pt.lon, pt.lat))
+                if callable(self.regions):
+                    region = self.regions(pt, reg.data.region)
+                elif self.regions == 'all' or reg.data.country in self.regions:
+                    region = reg.data.region
+                else:
+                    region = reg.data.country
 
         return region, not self.filter or (self.negate != (region not in self.filter))
 
@@ -783,11 +781,12 @@ class OsmConflator:
                 props['remarks'] = ref.remarks
             if ref and ref.region:
                 props['region'] = ref.region
-            elif self.geocoder and self.geocoder.enabled:
+            elif self.geocoder:
                 region, present = self.geocoder.find(after)
                 if not present:
                     return None
-                props['region'] = region
+                if region is not None:
+                    props['region'] = region
             return {'type': 'Feature', 'geometry': geometry, 'properties': props}
 
         max_distance = self.profile.get('max_distance', MAX_DISTANCE)
@@ -1258,9 +1257,6 @@ def check_dataset_for_duplicates(profile, dataset, print_all=False):
 
 
 def add_regions(dataset, geocoder):
-    if not geocoder.enabled:
-        return
-
     if geocoder.filter:
         logging.info('Geocoding and filtering points')
     else:
