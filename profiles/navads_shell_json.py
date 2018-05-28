@@ -1,8 +1,3 @@
-import json
-import codecs
-import re
-from collections import defaultdict
-
 source = 'Navads'
 dataset_id = 'navads_shell'
 query = [('amenity', 'fuel')]
@@ -12,6 +7,11 @@ max_request_boxes = 3
 
 
 def dataset(fileobj):
+    import json
+    import codecs
+    import re
+    from collections import defaultdict
+
     def format_phone(ph):
         if ph and len(ph) == 13 and ph[:3] == '+44':
             if (ph[3] == '1' and ph[4] != '1' and ph[5] != '1') or ph[3:7] == '7624':
