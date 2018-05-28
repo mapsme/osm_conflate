@@ -28,9 +28,9 @@ class SourcePoint:
 
     def __getitem__(self, i):
         if i == 0:
-            return self.lat
-        elif i == 1:
             return self.lon
+        elif i == 1:
+            return self.lat
         else:
             raise ValueError('A SourcePoint has only lat and lon in a list')
 
