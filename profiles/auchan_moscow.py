@@ -1,7 +1,3 @@
-# This profile requires lxml package
-import logging
-import re
-
 # A web page with a list of shops in Moscow. You can replace it with one for another city
 download_url = 'https://www.auchan.ru/ru/moscow/'
 source = 'auchan.ru'
@@ -44,6 +40,8 @@ def dataset(fileobj):
 
     # We are parsing HTML, and for that we need an lxml package
     from lxml import html
+    import logging
+    import re
     global download_url_copy, re
     h = html.fromstring(fileobj.read().decode('utf-8'))
     shops = h.find_class('shops-in-the-city-holder')[0]

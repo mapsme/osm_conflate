@@ -2,6 +2,7 @@
 
 ## master branch (1.4.0)
 
+* Refactored `conflate.py` into seven smaller files.
 * Added a simple kd-tree based geocoder for countries and regions. Controlled by the `regions` parameter in a profile.
 * You can filter by regions using `-r` argument or `"regions"` list in an audit file.
 * Using the new `nwr` query type of Overpass API.

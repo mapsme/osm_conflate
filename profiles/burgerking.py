@@ -2,10 +2,6 @@
 # and does not contain any useful data now.
 # So this profile is here solely for demonstration purposes.
 
-import json
-import codecs
-import re
-
 download_url = 'https://burgerking.ru/restaurant-locations-json-reply-new'
 source = 'Burger King'
 dataset_id = 'burger_king'
@@ -60,6 +56,9 @@ def dataset(fileobj):
         s = s.replace(' доб. ', '-')
         return s
 
+    import json
+    import codecs
+    import re
     notes = {
         172: 'Подвинуть на второй терминал',
         25: 'Подвинуть в ЮниМолл',

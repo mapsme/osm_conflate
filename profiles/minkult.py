@@ -1,8 +1,3 @@
-import json
-import logging
-import requests
-import codecs
-
 source = 'opendata.mkrf.ru'
 dataset_id = 'mkrf_theaters'
 query = [('amenity', 'theatre')]
@@ -12,6 +7,9 @@ master_tags = ('official_name', 'phone', 'opening_hours', 'website')
 
 # Reading the dataset passport to determine an URL of the latest dataset version
 def download_url():
+    import logging
+    import requests
+
     dataset_id = '7705851331-' + (param or 'museums')
     r = requests.get('http://opendata.mkrf.ru/opendata/{}/meta.json'.format(dataset_id))
     if r.status_code != 200 or len(r.content) == 0:
@@ -41,6 +39,9 @@ master_tags = ('official_name', 'phone', 'opening_hours', 'website')
 
 
 def dataset(fileobj):
+    import json
+    import codecs
+
     def make_wd_ranges(r):
         """Converts e.g. [0,1,4] into 'Mo-Tu, Fr'."""
         wd = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']

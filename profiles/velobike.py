@@ -1,7 +1,3 @@
-import codecs
-import json
-import logging
-
 # Where to get the latest feed
 download_url = 'http://www.velobike.ru/proxy/parkings/'
 # What to write for the changeset's source tag
@@ -29,6 +25,10 @@ master_tags = ('ref', 'capacity', 'capacity:electric', 'contact:email',
 
 
 def dataset(fileobj):
+    import codecs
+    import json
+    import logging
+
     # Specifying utf-8 is important, otherwise you'd get "bytes" instead of "str"
     source = json.load(codecs.getreader('utf-8')(fileobj))
     data = []

@@ -1,25 +1,3 @@
-# Available modules: codecs, logging, requests, json, etree. But importing these helps catch other errors
-import json
-import logging
-
-
-def download_url(mos_dataset_id=1421):
-    import requests
-    r = requests.get('https://data.mos.ru/api/datasets/expformats/?datasetId={}'.format(mos_dataset_id))
-    if r.status_code != 200 or len(r.content) == 0:
-        logging.error('Could not get URL for dataset: %s %s', r.status_code, r.text)
-        logging.error('Please check http://data.mos.ru/opendata/{}/passport'.format(mos_dataset_id))
-        return None
-    url = [x for x in r.json() if x['Format'] == 'json'][0]
-    version = '?'
-    title = 'dataset'
-    r = requests.get('https://data.mos.ru/apiproxy/opendata/{}/meta.json'.format(mos_dataset_id))
-    if r.status_code == 200:
-        title = r.json()['Title']
-        version = r.json()['VersionNumber']
-    logging.info('Downloading %s %s from %s', title, version, url['GenerationStart'])
-    return 'https://op.mos.ru/EHDWSREST/catalog/export/get?id=' + url['EhdId']
-
 # What will be put into "source" tags. Lower case please
 source = 'dit.mos.ru'
 # A fairly unique id of the dataset to query OSM, used for "ref:mos_parking" tags
@@ -46,8 +24,29 @@ tag_unmatched = None
 master_tags = ('zone:parking', 'ref', 'contact:phone', 'contact:website', 'operator')
 
 
+def download_url(mos_dataset_id=1421):
+    import requests
+    import logging
+    r = requests.get('https://data.mos.ru/api/datasets/expformats/?datasetId={}'.format(mos_dataset_id))
+    if r.status_code != 200 or len(r.content) == 0:
+        logging.error('Could not get URL for dataset: %s %s', r.status_code, r.text)
+        logging.error('Please check http://data.mos.ru/opendata/{}/passport'.format(mos_dataset_id))
+        return None
+    url = [x for x in r.json() if x['Format'] == 'json'][0]
+    version = '?'
+    title = 'dataset'
+    r = requests.get('https://data.mos.ru/apiproxy/opendata/{}/meta.json'.format(mos_dataset_id))
+    if r.status_code == 200:
+        title = r.json()['Title']
+        version = r.json()['VersionNumber']
+    logging.info('Downloading %s %s from %s', title, version, url['GenerationStart'])
+    return 'https://op.mos.ru/EHDWSREST/catalog/export/get?id=' + url['EhdId']
+
+
 # A list of SourcePoint objects. Initialize with (id, lat, lon, {tags}).
 def dataset(fileobj):
+    import json
+    import logging
     import zipfile
     import re
     zf = zipfile.ZipFile(fileobj)

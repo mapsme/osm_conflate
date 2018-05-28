@@ -1,6 +1,3 @@
-import json
-import logging
-
 source = 'dit.mos.ru'
 no_dataset_id = True
 query = [('building',)]
@@ -35,6 +32,11 @@ if param:
 
 
 def dataset(fileobj):
+    import zipfile
+    import json
+    import logging
+    global COMPLEX, ADM
+
     def find_center(geodata):
         if not geodata:
             return None
@@ -63,9 +65,7 @@ def dataset(fileobj):
                 return [lonlat[0]/cnt, lonlat[1]/cnt]
         return None
 
-    global COMPLEX, ADM
     logging.info('Экспортируем %s (%s)', ADM, 'строения' if COMPLEX else 'без строений')
-    import zipfile
     zf = zipfile.ZipFile(fileobj)
     data = []
     no_geodata = 0
