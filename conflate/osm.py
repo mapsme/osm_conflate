@@ -247,9 +247,7 @@ class OsmDownloader:
 
         return result
 
-    def download(self, dataset_points):
-        """Constructs an Overpass API query and requests objects
-        to match from a server."""
+    def calc_boxes(self, dataset_points):
         profile_bbox = self.profile.get('bbox', True)
         if not profile_bbox:
             bboxes = [None]
@@ -257,6 +255,17 @@ class OsmDownloader:
             bboxes = [profile_bbox]
         else:
             bboxes = self.split_into_bboxes(dataset_points)
+        return bboxes
+
+    def download(self, bboxes=None):
+        """Constructs an Overpass API query and requests objects
+        to match from a server."""
+        if not bboxes:
+            pbbox = self.profile.get('bbox', True)
+            if pbbox and hasattr(pbbox, '__len__') and len(pbbox) == 4:
+                bboxes = [pbbox]
+            else:
+                bboxes = [None]
 
         query = self.construct_overpass_query(bboxes)
         logging.debug('Overpass query: %s', query)

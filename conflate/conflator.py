@@ -40,7 +40,8 @@ class OsmConflator:
                 'dataset_id', required='A fairly unique id of the dataset to query OSM')
 
     def download_osm(self):
-        self.osmdata = self.downloader.download(self.dataset.values())
+        bboxes = self.downloader.calc_boxes(self.dataset.values())
+        self.osmdata = self.downloader.download(bboxes)
 
     def parse_osm(self, fileobj):
         self.osmdata = self.downloader.parse_xml(fileobj)
