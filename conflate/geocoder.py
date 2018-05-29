@@ -42,6 +42,13 @@ class Geocoder:
             def __getitem__(self, i):
                 return self.coord[i]
 
+        def unpack_coord(data):
+            if data[-1] > 0x7f:
+                data += b'\xFF'
+            else:
+                data += b'\0'
+            return struct.unpack('<l', data)[0] / 10000
+
         filename = os.path.join(os.getcwd(), os.path.dirname(__file__), 'places.bin')
         if not os.path.exists(filename):
             return None
@@ -61,15 +68,8 @@ class Geocoder:
                 dlat = f.read(3)
                 country = struct.unpack('B', f.read(1))[0]
                 region = struct.unpack('<h', f.read(2))[0]
-                try:
-                    places.append(PlacePoint(struct.unpack('<l', dlon + b'\0')[0] / 10000,
-                                             struct.unpack('<l', dlat + b'\0')[0] / 10000,
-                                             countries[country], regions[region]))
-                except IndexError:
-                    logging.error(
-                        'At %#x, got countries[%s], have %s; got regions[%s], have %s',
-                        f.tell(), country, len(countries), region, len(regions))
-                    raise
+                places.append(PlacePoint(unpack_coord(dlon), unpack_coord(dlat),
+                                         countries[country], regions[region]))
                 dlon = f.read(3)
         if not places:
             return None
@@ -109,7 +109,7 @@ class Geocoder:
                 if callable(self.regions):
                     region = self.regions(pt, region)
             elif region is None:
-                reg, _ = self.tree.search_nn((pt.lon, pt.lat))
+                reg, _ = self.tree.search_nn(pt)
                 if callable(self.regions):
                     region = self.regions(pt, reg.data.region)
                 elif self.regions == 'all' or reg.data.country in self.regions:
