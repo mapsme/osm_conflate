@@ -1,6 +1,10 @@
 # OSM Conflator Change Log
 
-## master branch (1.4.0)
+## master branch
+
+## 1.4.0
+
+_Released 2018-05-30_
 
 * Refactored `conflate.py` into seven smaller files.
 * Added a simple kd-tree based geocoder for countries and regions. Controlled by the `regions` parameter in a profile.
