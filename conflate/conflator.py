@@ -39,6 +39,9 @@ class OsmConflator:
             self.ref = 'ref:' + self.profile.get(
                 'dataset_id', required='A fairly unique id of the dataset to query OSM')
 
+    def set_overpass(self, server='alt'):
+        self.downloader.set_overpass(server)
+
     def download_osm(self):
         bboxes = self.downloader.calc_boxes(self.dataset.values())
         self.osmdata = self.downloader.download(bboxes)
