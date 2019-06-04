@@ -2,6 +2,12 @@
 
 ## master branch
 
+## 1.4.1
+
+_Released 2019-06-04_
+
+* Fixed an error when the query is pure regexp and it did not match anything.
+
 ## 1.4.0
 
 _Released 2018-05-30_

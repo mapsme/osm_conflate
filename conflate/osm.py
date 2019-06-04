@@ -200,9 +200,8 @@ class OsmDownloader:
                     found = False
                     for t2 in tag[1:]:
                         if t2[0] == '~':
-                            m = re.search(t2[1:], value)
-                            if not m:
-                                return False
+                            if re.search(t2[1:], value):
+                                found = True
                         elif t2[0] == '!':
                             if t2[1:].lower() in value.lower():
                                 found = True
